@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,13 +14,13 @@ import (
 )
 
 var slingCmd = &cobra.Command{
-	Use:     "sling <bead-id> [target]",
+	Use:     "sling <bead-or-formula> [target]",
 	GroupID: GroupWork,
 	Short:   "Hook work and start immediately (no restart)",
 	Long: `Sling work onto an agent's hook and start working immediately.
 
 Unlike 'gt handoff', sling does NOT restart the session. It:
-  1. Attaches the bead to the hook (durability)
+  1. Attaches the work to the hook (durability)
   2. Injects a prompt to start working NOW
 
 This preserves current context while kicking off work. Use when:
@@ -31,17 +32,26 @@ The hook provides durability - the agent can restart, compact, or hand off,
 but until the hook is changed or closed, that agent owns the work.
 
 Examples:
-  gt sling gt-abc                       # Hook and start on it now
+  gt sling gt-abc                       # Hook bead and start now
   gt sling gt-abc -s "Fix the bug"      # With context subject
-  gt sling gt-abc crew                  # Sling to crew worker
-  gt sling gt-abc gastown/crew/max      # Sling to specific agent
+  gt sling gt-abc crew                  # Sling bead to crew worker
+  gt sling gt-abc gastown/crew/max      # Sling bead to specific agent
 
-Formula scaffolding (--on flag):
+Standalone formula slinging:
+  gt sling mol-town-shutdown mayor/     # Cook + wisp + attach + nudge
+  gt sling towers-of-hanoi --var disks=3  # With formula variables
+
+When the first argument is a formula (not a bead), sling will:
+  1. Cook the formula (bd cook)
+  2. Create a wisp instance (bd wisp)
+  3. Attach the wisp to the target's hook
+  4. Nudge the target to start
+
+Formula-on-bead scaffolding (--on flag):
   gt sling shiny --on gt-abc            # Apply shiny formula to existing work
   gt sling mol-review --on gt-abc crew  # Apply review formula, sling to crew
 
-When --on is specified, the first argument is a formula name (not a bead).
-The formula shapes execution of the target bead, creating wisp scaffolding.
+When --on is specified, the formula shapes execution of the target bead.
 
 Compare:
   gt hook <bead>      # Just attach (no action)
@@ -57,7 +67,8 @@ var (
 	slingSubject  string
 	slingMessage  string
 	slingDryRun   bool
-	slingOnTarget string // --on flag: target bead when slinging a formula
+	slingOnTarget string   // --on flag: target bead when slinging a formula
+	slingVars     []string // --var flag: formula variables (key=value)
 )
 
 func init() {
@@ -65,37 +76,47 @@ func init() {
 	slingCmd.Flags().StringVarP(&slingMessage, "message", "m", "", "Context message for the work")
 	slingCmd.Flags().BoolVarP(&slingDryRun, "dry-run", "n", false, "Show what would be done")
 	slingCmd.Flags().StringVar(&slingOnTarget, "on", "", "Apply formula to existing bead (implies wisp scaffolding)")
+	slingCmd.Flags().StringArrayVar(&slingVars, "var", nil, "Formula variable (key=value), can be repeated")
 	rootCmd.AddCommand(slingCmd)
 }
 
 func runSling(cmd *cobra.Command, args []string) error {
-	// Determine if we're in formula mode (--on flag)
-	var beadID string
-	var formulaName string
-
-	if slingOnTarget != "" {
-		// Formula mode: gt sling <formula> --on <bead>
-		formulaName = args[0]
-		beadID = slingOnTarget
-	} else {
-		// Normal mode: gt sling <bead>
-		beadID = args[0]
-	}
-
 	// Polecats cannot sling - check early before writing anything
 	if polecatName := os.Getenv("GT_POLECAT"); polecatName != "" {
 		return fmt.Errorf("polecats cannot sling (use gt done for handoff)")
 	}
 
-	// Verify the bead exists
-	if err := verifyBeadExists(beadID); err != nil {
-		return err
-	}
+	// Determine mode based on flags and argument types
+	var beadID string
+	var formulaName string
 
-	// If formula specified, verify it exists
-	if formulaName != "" {
+	if slingOnTarget != "" {
+		// Formula-on-bead mode: gt sling <formula> --on <bead>
+		formulaName = args[0]
+		beadID = slingOnTarget
+		// Verify both exist
+		if err := verifyBeadExists(beadID); err != nil {
+			return err
+		}
 		if err := verifyFormulaExists(formulaName); err != nil {
 			return err
+		}
+	} else {
+		// Could be bead mode or standalone formula mode
+		firstArg := args[0]
+
+		// Try as bead first
+		if err := verifyBeadExists(firstArg); err == nil {
+			// It's a bead
+			beadID = firstArg
+		} else {
+			// Not a bead - try as standalone formula
+			if err := verifyFormulaExists(firstArg); err == nil {
+				// Standalone formula mode: gt sling <formula> [target]
+				return runSlingFormula(args)
+			}
+			// Neither bead nor formula
+			return fmt.Errorf("'%s' is not a valid bead or formula", firstArg)
 		}
 	}
 
@@ -333,22 +354,154 @@ func detectCloneRoot() (string, error) {
 }
 
 // verifyFormulaExists checks that the formula exists using bd formula show.
-// Formulas can be proto beads (mol-*) or formula files (.formula.json).
+// Formulas can be formula files (.formula.json/.formula.toml).
 func verifyFormulaExists(formulaName string) error {
-	// Try as a proto bead first (mol-* prefix is common)
-	cmd := exec.Command("bd", "show", formulaName, "--json")
+	// Try bd formula show (handles all formula file formats)
+	cmd := exec.Command("bd", "formula", "show", formulaName)
 	if err := cmd.Run(); err == nil {
-		return nil // Found as a proto
+		return nil
 	}
 
 	// Try with mol- prefix
-	cmd = exec.Command("bd", "show", "mol-"+formulaName, "--json")
+	cmd = exec.Command("bd", "formula", "show", "mol-"+formulaName)
 	if err := cmd.Run(); err == nil {
-		return nil // Found as mol-<name>
+		return nil
 	}
 
-	// TODO: Check for .formula.json file in search paths
-	// For now, we require the formula to exist as a proto
+	return fmt.Errorf("formula '%s' not found (check 'bd formula list')", formulaName)
+}
 
-	return fmt.Errorf("formula '%s' not found (try 'bd cook' to create it from a .formula.json file)", formulaName)
+// runSlingFormula handles standalone formula slinging.
+// Flow: cook → wisp → attach to hook → nudge
+func runSlingFormula(args []string) error {
+	formulaName := args[0]
+
+	// Determine target (self or specified)
+	var target string
+	if len(args) > 1 {
+		target = args[1]
+	}
+
+	// Resolve target agent and pane
+	var targetAgent string
+	var targetPane string
+	var hookRoot string
+	var err error
+
+	if target != "" {
+		// Slinging to another agent
+		targetAgent, targetPane, err = resolveTargetAgent(target)
+		if err != nil {
+			return fmt.Errorf("resolving target: %w", err)
+		}
+		hookRoot, err = detectCloneRoot()
+		if err != nil {
+			return fmt.Errorf("detecting clone root: %w", err)
+		}
+	} else {
+		// Slinging to self
+		roleInfo, err := GetRole()
+		if err != nil {
+			return fmt.Errorf("detecting role: %w", err)
+		}
+		switch roleInfo.Role {
+		case RoleMayor:
+			targetAgent = "mayor"
+		case RoleDeacon:
+			targetAgent = "deacon"
+		case RoleWitness:
+			targetAgent = fmt.Sprintf("%s/witness", roleInfo.Rig)
+		case RoleRefinery:
+			targetAgent = fmt.Sprintf("%s/refinery", roleInfo.Rig)
+		case RolePolecat:
+			targetAgent = fmt.Sprintf("%s/polecats/%s", roleInfo.Rig, roleInfo.Polecat)
+		case RoleCrew:
+			targetAgent = fmt.Sprintf("%s/crew/%s", roleInfo.Rig, roleInfo.Polecat)
+		default:
+			return fmt.Errorf("cannot determine agent identity (role: %s)", roleInfo.Role)
+		}
+		targetPane = os.Getenv("TMUX_PANE")
+		hookRoot = roleInfo.Home
+		if hookRoot == "" {
+			hookRoot, err = detectCloneRoot()
+			if err != nil {
+				return fmt.Errorf("detecting clone root: %w", err)
+			}
+		}
+	}
+
+	fmt.Printf("%s Slinging formula %s to %s...\n", style.Bold.Render("🎯"), formulaName, targetAgent)
+
+	if slingDryRun {
+		fmt.Printf("Would cook formula: %s\n", formulaName)
+		fmt.Printf("Would create wisp and attach to hook: %s\n", wisp.HookPath(hookRoot, targetAgent))
+		for _, v := range slingVars {
+			fmt.Printf("  --var %s\n", v)
+		}
+		fmt.Printf("Would nudge pane: %s\n", targetPane)
+		return nil
+	}
+
+	// Step 1: Cook the formula (ensures proto exists)
+	fmt.Printf("  Cooking formula...\n")
+	cookArgs := []string{"cook", formulaName}
+	cookCmd := exec.Command("bd", cookArgs...)
+	cookCmd.Stderr = os.Stderr
+	if err := cookCmd.Run(); err != nil {
+		return fmt.Errorf("cooking formula: %w", err)
+	}
+
+	// Step 2: Create wisp instance (ephemeral)
+	fmt.Printf("  Creating wisp...\n")
+	wispArgs := []string{"wisp", formulaName}
+	for _, v := range slingVars {
+		wispArgs = append(wispArgs, "--var", v)
+	}
+	wispArgs = append(wispArgs, "--json")
+
+	wispCmd := exec.Command("bd", wispArgs...)
+	wispOut, err := wispCmd.Output()
+	if err != nil {
+		return fmt.Errorf("creating wisp: %w", err)
+	}
+
+	// Parse wisp output to get the root ID
+	var wispResult struct {
+		RootID string `json:"root_id"`
+	}
+	if err := json.Unmarshal(wispOut, &wispResult); err != nil {
+		// Fallback: use formula name as identifier
+		wispResult.RootID = formulaName
+	}
+
+	fmt.Printf("%s Wisp created: %s\n", style.Bold.Render("✓"), wispResult.RootID)
+
+	// Step 3: Attach to hook
+	sw := wisp.NewSlungWork(wispResult.RootID, targetAgent)
+	sw.Subject = slingSubject
+	if sw.Subject == "" {
+		sw.Subject = fmt.Sprintf("Formula: %s", formulaName)
+	}
+	sw.Context = slingMessage
+	sw.Formula = formulaName
+
+	if err := wisp.WriteSlungWork(hookRoot, targetAgent, sw); err != nil {
+		return fmt.Errorf("writing to hook: %w", err)
+	}
+	fmt.Printf("%s Attached to hook\n", style.Bold.Render("✓"))
+
+	// Step 4: Nudge to start
+	if targetPane == "" {
+		fmt.Printf("%s No pane to nudge (target may need manual start)\n", style.Dim.Render("○"))
+		return nil
+	}
+
+	prompt := fmt.Sprintf("Formula %s slung. Run `gt mol status` to see your hook, then execute the steps.", formulaName)
+	t := tmux.NewTmux()
+	if err := t.NudgePane(targetPane, prompt); err != nil {
+		return fmt.Errorf("nudging: %w", err)
+	}
+	fmt.Printf("%s Nudged to start\n", style.Bold.Render("▶"))
+
+	return nil
 }
