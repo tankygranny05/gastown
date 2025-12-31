@@ -400,6 +400,99 @@ func TestExpandListNoTownRoot(t *testing.T) {
 	}
 }
 
+func TestExpandQueue(t *testing.T) {
+	// Create temp directory with messaging config
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write messaging.json with test queues
+	configContent := `{
+  "type": "messaging",
+  "version": 1,
+  "queues": {
+    "work/gastown": {"workers": ["gastown/polecats/*"], "max_claims": 3},
+    "priority-high": {"workers": ["mayor/", "gastown/witness"]}
+  }
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "messaging.json"), []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewRouterWithTownRoot(tmpDir, tmpDir)
+
+	tests := []struct {
+		name        string
+		queueName   string
+		wantWorkers []string
+		wantMax     int
+		wantErr     bool
+		errString   string
+	}{
+		{
+			name:        "work/gastown queue",
+			queueName:   "work/gastown",
+			wantWorkers: []string{"gastown/polecats/*"},
+			wantMax:     3,
+		},
+		{
+			name:        "priority-high queue",
+			queueName:   "priority-high",
+			wantWorkers: []string{"mayor/", "gastown/witness"},
+			wantMax:     0, // Not specified, defaults to 0
+		},
+		{
+			name:      "unknown queue",
+			queueName: "nonexistent",
+			wantErr:   true,
+			errString: "unknown queue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := r.expandQueue(tt.queueName)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expandQueue(%q) expected error, got nil", tt.queueName)
+				} else if tt.errString != "" && !contains(err.Error(), tt.errString) {
+					t.Errorf("expandQueue(%q) error = %v, want containing %q", tt.queueName, err, tt.errString)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("expandQueue(%q) unexpected error: %v", tt.queueName, err)
+				return
+			}
+			if len(got.Workers) != len(tt.wantWorkers) {
+				t.Errorf("expandQueue(%q).Workers = %v, want %v", tt.queueName, got.Workers, tt.wantWorkers)
+				return
+			}
+			for i, worker := range got.Workers {
+				if worker != tt.wantWorkers[i] {
+					t.Errorf("expandQueue(%q).Workers[%d] = %q, want %q", tt.queueName, i, worker, tt.wantWorkers[i])
+				}
+			}
+			if got.MaxClaims != tt.wantMax {
+				t.Errorf("expandQueue(%q).MaxClaims = %d, want %d", tt.queueName, got.MaxClaims, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestExpandQueueNoTownRoot(t *testing.T) {
+	r := &Router{workDir: "/tmp", townRoot: ""}
+	_, err := r.expandQueue("work")
+	if err == nil {
+		t.Error("expandQueue with no townRoot should error")
+	}
+	if !contains(err.Error(), "no town root") {
+		t.Errorf("expandQueue error = %v, want containing 'no town root'", err)
+	}
+}
+
 // contains checks if s contains substr (helper for error checking)
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))

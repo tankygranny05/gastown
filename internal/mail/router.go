@@ -17,6 +17,9 @@ import (
 // ErrUnknownList indicates a mailing list name was not found in configuration.
 var ErrUnknownList = errors.New("unknown mailing list")
 
+// ErrUnknownQueue indicates a queue name was not found in configuration.
+var ErrUnknownQueue = errors.New("unknown queue")
+
 // Router handles message delivery via beads.
 // It routes messages to the correct beads database based on address:
 // - Town-level (mayor/, deacon/) -> {townRoot}/.beads
@@ -94,6 +97,28 @@ func (r *Router) expandList(listName string) ([]string, error) {
 	}
 
 	return recipients, nil
+}
+
+// expandQueue returns the QueueConfig for a queue name.
+// Returns ErrUnknownQueue if the queue is not found.
+func (r *Router) expandQueue(queueName string) (*config.QueueConfig, error) {
+	// Load messaging config from town root
+	if r.townRoot == "" {
+		return nil, fmt.Errorf("%w: %s (no town root)", ErrUnknownQueue, queueName)
+	}
+
+	configPath := config.MessagingConfigPath(r.townRoot)
+	cfg, err := config.LoadMessagingConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading messaging config: %w", err)
+	}
+
+	queueCfg, ok := cfg.Queues[queueName]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownQueue, queueName)
+	}
+
+	return &queueCfg, nil
 }
 
 // detectTownRoot finds the town root by looking for mayor/town.json.
