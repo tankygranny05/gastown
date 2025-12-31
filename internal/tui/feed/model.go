@@ -281,6 +281,11 @@ func (m *Model) addEvent(e Event) {
 		}
 	}
 
+	// Filter out events with empty bead IDs (malformed mutations)
+	if e.Type == "update" && e.Target == "" {
+		return
+	}
+
 	// Filter out noisy agent session updates from the event feed.
 	// Agent session molecules (like gt-gastown-crew-joe) update frequently
 	// for status tracking. These updates are visible in the agent tree,
@@ -291,6 +296,18 @@ func (m *Model) addEvent(e Event) {
 		// (agent tree was updated above)
 		m.updateViewContent()
 		return
+	}
+
+	// Deduplicate rapid updates to the same bead within 2 seconds.
+	// This prevents spam when multiple deps/labels are added to one issue.
+	if e.Type == "update" && e.Target != "" && len(m.events) > 0 {
+		lastEvent := m.events[len(m.events)-1]
+		if lastEvent.Type == "update" && lastEvent.Target == e.Target {
+			// Same bead updated within 2 seconds - skip duplicate
+			if e.Time.Sub(lastEvent.Time) < 2*time.Second {
+				return
+			}
+		}
 	}
 
 	// Add to event feed
