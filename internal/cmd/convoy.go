@@ -30,6 +30,7 @@ var (
 	convoyStatusJSON bool
 	convoyListJSON   bool
 	convoyListStatus string
+	convoyListAll    bool
 )
 
 var convoyCmd = &cobra.Command{
@@ -95,11 +96,12 @@ Without an ID, shows status of all active convoys.`,
 var convoyListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List convoys",
-	Long: `List all convoys, optionally filtered by status.
+	Long: `List convoys, showing open convoys by default.
 
 Examples:
-  gt convoy list
-  gt convoy list --status=open
+  gt convoy list              # Open convoys only (default)
+  gt convoy list --all        # All convoys (open + closed)
+  gt convoy list --status=closed  # Recently landed
   gt convoy list --json`,
 	RunE: runConvoyList,
 }
@@ -115,6 +117,7 @@ func init() {
 	// List flags
 	convoyListCmd.Flags().BoolVar(&convoyListJSON, "json", false, "Output as JSON")
 	convoyListCmd.Flags().StringVar(&convoyListStatus, "status", "", "Filter by status (open, closed)")
+	convoyListCmd.Flags().BoolVar(&convoyListAll, "all", false, "Show all convoys (open and closed)")
 
 	// Add subcommands
 	convoyCmd.AddCommand(convoyCreateCmd)
@@ -383,7 +386,10 @@ func runConvoyList(cmd *cobra.Command, args []string) error {
 	listArgs := []string{"list", "--type=convoy", "--json"}
 	if convoyListStatus != "" {
 		listArgs = append(listArgs, "--status="+convoyListStatus)
+	} else if convoyListAll {
+		listArgs = append(listArgs, "--all")
 	}
+	// Default (no flags) = open only (bd's default behavior)
 
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = townBeads
