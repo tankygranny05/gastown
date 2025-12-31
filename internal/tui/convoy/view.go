@@ -3,6 +3,7 @@ package convoy
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -146,10 +147,14 @@ func statusToIcon(status string) string {
 	}
 }
 
-// truncate shortens a string to the given length.
+// truncate shortens a string to the given rune length, preserving UTF-8.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	runes := []rune(s)
+	if maxLen <= 3 {
+		return "..."
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
