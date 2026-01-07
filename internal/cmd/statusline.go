@@ -234,7 +234,12 @@ func runMayorStatusLine(t *tmux.Tmux) error {
 	for _, rigName := range rigNames {
 		status := rigStatuses[rigName]
 		var led string
-		if status.hasWitness && status.hasRefinery {
+
+		// Check if rig is parked or docked
+		opState, _ := getRigOperationalState(townRoot, rigName)
+		if opState == "PARKED" || opState == "DOCKED" {
+			led = "⏸️" // Parked/docked - intentionally offline
+		} else if status.hasWitness && status.hasRefinery {
 			led = "🟢" // Both running - fully active
 		} else if status.hasWitness || status.hasRefinery {
 			led = "🟡" // One running - partially active
