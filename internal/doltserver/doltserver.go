@@ -736,7 +736,7 @@ func EnsureMetadata(townRoot, rigName string) error {
 		return fmt.Errorf("creating beads directory: %w", err)
 	}
 
-	if err := os.WriteFile(metadataPath, append(data, '\n'), 0600); err != nil {
+	if err := util.AtomicWriteFile(metadataPath, append(data, '\n'), 0600); err != nil {
 		return fmt.Errorf("writing metadata.json: %w", err)
 	}
 
