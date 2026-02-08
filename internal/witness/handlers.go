@@ -503,16 +503,15 @@ func findCleanupWisp(workDir, polecatName string) (string, error) {
 		return "", nil
 	}
 
-	// Simple extraction - look for "id" field
-	// Full JSON parsing would add dependency on encoding/json
-	if idx := strings.Index(output, `"id":`); idx >= 0 {
-		rest := output[idx+5:]
-		rest = strings.TrimLeft(rest, ` "`)
-		if endIdx := strings.IndexAny(rest, `",}`); endIdx > 0 {
-			return rest[:endIdx], nil
-		}
+	var items []struct {
+		ID string `json:"id"`
 	}
-
+	if err := json.Unmarshal([]byte(output), &items); err != nil {
+		return "", fmt.Errorf("parsing cleanup wisp response: %w", err)
+	}
+	if len(items) > 0 {
+		return items[0].ID, nil
+	}
 	return "", nil
 }
 
