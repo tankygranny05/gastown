@@ -406,6 +406,73 @@ func TestManagerGetWithStaleStateName(t *testing.T) {
 	}
 }
 
+func TestManagerAddSyncsRemotesFromRig(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "crew-test-remotes-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	rigPath := filepath.Join(tmpDir, "test-rig")
+	if err := os.MkdirAll(rigPath, 0755); err != nil {
+		t.Fatalf("failed to create rig dir: %v", err)
+	}
+
+	// Create a "fork" bare repo (what origin should point to)
+	forkRepoPath := filepath.Join(tmpDir, "fork.git")
+	if err := runCmd("git", "init", "--bare", forkRepoPath); err != nil {
+		t.Fatalf("failed to create fork repo: %v", err)
+	}
+
+	// Create an "upstream" bare repo
+	upstreamRepoPath := filepath.Join(tmpDir, "upstream.git")
+	if err := runCmd("git", "init", "--bare", upstreamRepoPath); err != nil {
+		t.Fatalf("failed to create upstream repo: %v", err)
+	}
+
+	// Create mayor/rig with both remotes configured
+	mayorRigPath := filepath.Join(rigPath, "mayor", "rig")
+	if err := runCmd("git", "clone", forkRepoPath, mayorRigPath); err != nil {
+		t.Fatalf("failed to clone mayor rig: %v", err)
+	}
+	if err := runCmd("git", "-C", mayorRigPath, "remote", "add", "upstream", upstreamRepoPath); err != nil {
+		t.Fatalf("failed to add upstream to mayor: %v", err)
+	}
+
+	// Rig GitURL uses upstream (simulating the bug — clone from upstream)
+	r := &rig.Rig{
+		Name:   "test-rig",
+		Path:   rigPath,
+		GitURL: upstreamRepoPath,
+	}
+
+	mgr := NewManager(r, git.NewGit(rigPath))
+
+	worker, err := mgr.Add("sync_test", false)
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Verify crew clone's origin was updated to match mayor/rig's origin (the fork)
+	crewGit := git.NewGit(worker.ClonePath)
+	originURL, err := crewGit.RemoteURL("origin")
+	if err != nil {
+		t.Fatalf("failed to get crew origin URL: %v", err)
+	}
+	if originURL != forkRepoPath {
+		t.Errorf("crew origin = %q, want %q (should match mayor/rig)", originURL, forkRepoPath)
+	}
+
+	// Verify upstream remote was added
+	upstreamURL, err := crewGit.RemoteURL("upstream")
+	if err != nil {
+		t.Fatalf("failed to get crew upstream URL: %v", err)
+	}
+	if upstreamURL != upstreamRepoPath {
+		t.Errorf("crew upstream = %q, want %q", upstreamURL, upstreamRepoPath)
+	}
+}
+
 // Helper to run commands
 func runCmd(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
