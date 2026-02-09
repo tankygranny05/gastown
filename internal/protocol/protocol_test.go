@@ -23,6 +23,10 @@ func TestParseMessageType(t *testing.T) {
 		{"Unknown subject", ""},
 		{"", ""},
 		{"  MERGE_READY nux  ", TypeMergeReady}, // with whitespace
+		{"MERGEDFOO", ""},                       // prefix without space delimiter
+		{"MERGE_READYBAR", ""},                  // prefix without space delimiter
+		{"MERGE_FAILEDX", ""},                   // prefix without space delimiter
+		{"REWORK_REQUESTZ", ""},                 // prefix without space delimiter
 	}
 
 	for _, tt := range tests {
