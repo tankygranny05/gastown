@@ -80,14 +80,29 @@ Example:
 var rigListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all rigs in the workspace",
-	RunE:  runRigList,
+	Long: `List all registered rigs in the Gas Town workspace.
+
+Shows each rig's name, git URL, and status. Rigs are project containers
+that hold agent workspaces, issue tracking, and configuration.
+
+Examples:
+  gt rig list`,
+	RunE: runRigList,
 }
 
 var rigRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Remove a rig from the registry (does not delete files)",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runRigRemove,
+	Long: `Remove a rig entry from the workspace registry.
+
+This only removes the rig from mayor/rigs.json. It does NOT delete
+the rig directory or any of its contents. To fully clean up, delete
+the rig directory manually after removing it from the registry.
+
+Examples:
+  gt rig remove my-project`,
+	Args: cobra.ExactArgs(1),
+	RunE: runRigRemove,
 }
 
 var rigResetCmd = &cobra.Command{

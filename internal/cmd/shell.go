@@ -16,7 +16,17 @@ var shellCmd = &cobra.Command{
 	Use:     "shell",
 	GroupID: GroupConfig,
 	Short:   "Manage shell integration",
-	RunE:    requireSubcommand,
+	Long: `Manage the Gas Town shell integration for bash and zsh.
+
+The shell integration adds a hook to your shell RC file that automatically
+sets GT_TOWN_ROOT and GT_RIG environment variables when you cd into a
+Gas Town rig directory.
+
+Commands:
+  gt shell install   Install or update the shell hook
+  gt shell remove    Remove the shell hook
+  gt shell status    Show whether integration is installed`,
+	RunE: requireSubcommand,
 }
 
 var shellInstallCmd = &cobra.Command{

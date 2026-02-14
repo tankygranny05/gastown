@@ -50,15 +50,30 @@ Examples:
 var channelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all channels",
-	Args:  cobra.NoArgs,
-	RunE:  runChannelList,
+	Long: `List all broadcast channels in the workspace.
+
+Shows channel name, retention policy, status, and creator.
+
+Examples:
+  gt mail channel list          # List all channels
+  gt mail channel list --json   # JSON output`,
+	Args: cobra.NoArgs,
+	RunE: runChannelList,
 }
 
 var channelShowCmd = &cobra.Command{
 	Use:   "show <name>",
 	Short: "Show channel messages",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChannelShow,
+	Long: `Show messages from a specific broadcast channel.
+
+Displays channel metadata (retention policy) and all messages,
+sorted by creation time with sender and priority information.
+
+Examples:
+  gt mail channel show alerts          # View alerts channel
+  gt mail channel show alerts --json   # JSON output`,
+	Args: cobra.ExactArgs(1),
+	RunE: runChannelShow,
 }
 
 var channelCreateCmd = &cobra.Command{
@@ -76,8 +91,15 @@ Retention policy:
 var channelDeleteCmd = &cobra.Command{
 	Use:   "delete <name>",
 	Short: "Delete a channel",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChannelDelete,
+	Long: `Delete a broadcast channel and its metadata.
+
+This removes the channel definition. Existing messages that were
+broadcast to the channel are not deleted.
+
+Examples:
+  gt mail channel delete alerts`,
+	Args: cobra.ExactArgs(1),
+	RunE: runChannelDelete,
 }
 
 var channelSubscribeCmd = &cobra.Command{
@@ -101,9 +123,15 @@ var channelUnsubscribeCmd = &cobra.Command{
 var channelSubscribersCmd = &cobra.Command{
 	Use:   "subscribers <name>",
 	Short: "List channel subscribers",
-	Long:  `List all subscribers to a channel.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChannelSubscribers,
+	Long: `List all subscribers to a broadcast channel.
+
+Shows each subscriber's identity (BD_ACTOR value).
+
+Examples:
+  gt mail channel subscribers alerts          # List subscribers
+  gt mail channel subscribers alerts --json   # JSON output`,
+	Args: cobra.ExactArgs(1),
+	RunE: runChannelSubscribers,
 }
 
 func init() {
