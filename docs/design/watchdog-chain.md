@@ -149,7 +149,7 @@ Next daemon tick:
 ```
 Daemon → ensureDeaconRunning()
     │
-    └─ Spawns fresh Deacon in gt-deacon
+    └─ Spawns fresh Deacon in hq-deacon
         │
         └─ SessionStart hook: gt mail check --inject
             │

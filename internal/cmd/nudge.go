@@ -49,8 +49,8 @@ This is the ONLY way to send messages to Claude sessions.
 Do not use raw tmux send-keys elsewhere.
 
 Role shortcuts (expand to session names):
-  mayor     Maps to gt-mayor
-  deacon    Maps to gt-deacon
+  mayor     Maps to hq-mayor
+  deacon    Maps to hq-deacon
   witness   Maps to gt-<rig>-witness (uses current rig)
   refinery  Maps to gt-<rig>-refinery (uses current rig)
 
@@ -171,7 +171,7 @@ func runNudge(cmd *cobra.Command, args []string) error {
 	t := tmux.NewTmux()
 
 	// Expand role shortcuts to session names
-	// These shortcuts let users type "mayor" instead of "gt-mayor"
+	// These shortcuts let users type "mayor" instead of "hq-mayor"
 	switch target {
 	case "mayor":
 		target = session.MayorSessionName()
