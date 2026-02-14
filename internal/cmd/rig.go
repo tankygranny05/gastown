@@ -80,14 +80,23 @@ Example:
 var rigListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all rigs in the workspace",
-	RunE:  runRigList,
+	Long: `List all rigs registered in the Gas Town workspace.
+
+Shows each rig's name, git remote URL, beads prefix, and status.
+Use --json for machine-readable output.`,
+	RunE: runRigList,
 }
 
 var rigRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Remove a rig from the registry (does not delete files)",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runRigRemove,
+	Long: `Remove a rig from the Gas Town registry.
+
+This unregisters the rig from the workspace configuration and cleans up
+its beads routing entry. The rig's files and git repository are not
+deleted — only the Gas Town registration is removed.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runRigRemove,
 }
 
 var rigResetCmd = &cobra.Command{

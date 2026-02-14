@@ -16,7 +16,13 @@ var shellCmd = &cobra.Command{
 	Use:     "shell",
 	GroupID: GroupConfig,
 	Short:   "Manage shell integration",
-	RunE:    requireSubcommand,
+	Long: `Manage Gas Town shell integration for bash and zsh.
+
+The shell integration adds a directory-change hook that automatically
+sets GT_TOWN_ROOT and GT_RIG environment variables when you cd into
+a Gas Town rig. Use 'gt shell install' to set up and 'gt shell remove'
+to uninstall.`,
+	RunE: requireSubcommand,
 }
 
 var shellInstallCmd = &cobra.Command{

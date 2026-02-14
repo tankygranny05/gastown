@@ -53,7 +53,11 @@ If both are available and disagree, a warning is shown.`,
 var roleShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Show current role",
-	RunE:  runRoleShow,
+	Long: `Show the current Gas Town role, its source, and associated metadata.
+
+Displays role name, detection source (GT_ROLE env var or directory),
+home directory, rig, and worker name if applicable.`,
+	RunE: runRoleShow,
 }
 
 var roleHomeCmd = &cobra.Command{
@@ -83,7 +87,11 @@ This is useful for debugging role detection issues.`,
 var roleListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all known roles",
-	RunE:  runRoleList,
+	Long: `List all Gas Town roles and their descriptions.
+
+Roles include mayor, deacon, witness, refinery, polecat, and crew.
+Each role has a specific function within the Gas Town architecture.`,
+	RunE: runRoleList,
 }
 
 var roleEnvCmd = &cobra.Command{
