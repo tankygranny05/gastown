@@ -133,7 +133,6 @@ func runDone(cmd *cobra.Command, args []string) error {
 			if err := selfKillSession(deferredTownRoot, deferredRoleInfo); err != nil {
 				style.PrintWarning("deferred session kill failed: %v", err)
 			}
-			os.Exit(0)
 		}
 	}()
 
@@ -798,9 +797,7 @@ notifyWitness:
 		fmt.Printf("  Witness will handle cleanup.\n")
 	}
 	fmt.Printf("  Goodbye!\n")
-	os.Exit(0)
-
-	return nil // unreachable, but keeps compiler happy
+	return nil
 }
 
 // setDoneIntentLabel writes a done-intent:<type>:<unix-ts> label on the agent bead
