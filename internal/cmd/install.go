@@ -318,7 +318,14 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			// Start the Dolt server — bd commands need a running server.
 			// The server stays running after install (it's lightweight infrastructure,
 			// like a database). Stop it with 'gt dolt stop' when not needed.
-			if err := doltserver.Start(absPath); err != nil {
+			// Skip local start when using a remote Dolt server (GT_DOLT_HOST).
+			if doltserver.IsRemote() {
+				if err := doltserver.CheckRemoteReachable(); err != nil {
+					fmt.Printf("   %s Remote Dolt server not reachable: %v\n", style.Dim.Render("⚠"), err)
+				} else {
+					fmt.Printf("   ✓ Remote Dolt server reachable at %s\n", doltserver.RemoteAddr())
+				}
+			} else if err := doltserver.Start(absPath); err != nil {
 				if !strings.Contains(err.Error(), "already running") {
 					fmt.Printf("   %s Could not start Dolt server: %v\n", style.Dim.Render("⚠"), err)
 				}

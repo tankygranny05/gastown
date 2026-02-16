@@ -3100,3 +3100,60 @@ func TestFindOrphanedDatabases_EndToEnd(t *testing.T) {
 		t.Errorf("expected 0 orphans after cleanup, got %d", len(orphans))
 	}
 }
+
+// =============================================================================
+// Remote Dolt server tests
+// =============================================================================
+
+func TestIsRemote_NotSet(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "")
+	if IsRemote() {
+		t.Error("IsRemote() = true, want false when GT_DOLT_HOST is empty")
+	}
+}
+
+func TestIsRemote_Set(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "dolt.example.com")
+	if !IsRemote() {
+		t.Error("IsRemote() = false, want true when GT_DOLT_HOST is set")
+	}
+}
+
+func TestRemoteAddr_NotSet(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "")
+	if got := RemoteAddr(); got != "" {
+		t.Errorf("RemoteAddr() = %q, want empty when GT_DOLT_HOST is empty", got)
+	}
+}
+
+func TestRemoteAddr_HostOnly(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "dolt.example.com")
+	want := fmt.Sprintf("dolt.example.com:%d", DefaultPort)
+	if got := RemoteAddr(); got != want {
+		t.Errorf("RemoteAddr() = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteAddr_HostAndPort(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "dolt.example.com:5555")
+	if got := RemoteAddr(); got != "dolt.example.com:5555" {
+		t.Errorf("RemoteAddr() = %q, want %q", got, "dolt.example.com:5555")
+	}
+}
+
+func TestCheckRemoteReachable_NotSet(t *testing.T) {
+	t.Setenv("GT_DOLT_HOST", "")
+	err := CheckRemoteReachable()
+	if err == nil {
+		t.Error("CheckRemoteReachable() = nil, want error when GT_DOLT_HOST is empty")
+	}
+}
+
+func TestCheckRemoteReachable_Unreachable(t *testing.T) {
+	// Use a non-routable address to ensure connection fails quickly
+	t.Setenv("GT_DOLT_HOST", "192.0.2.1:1")
+	err := CheckRemoteReachable()
+	if err == nil {
+		t.Error("CheckRemoteReachable() = nil, want error for unreachable host")
+	}
+}

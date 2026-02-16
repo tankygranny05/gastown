@@ -232,26 +232,30 @@ func runDown(cmd *cobra.Command, args []string) error {
 	}
 
 	// Phase 4b: Stop Dolt server
-	doltCfg := doltserver.DefaultConfig(townRoot)
-	if _, statErr := os.Stat(doltCfg.DataDir); statErr == nil {
-		doltRunning, doltPid, doltErr := doltserver.IsRunning(townRoot)
-		if doltErr != nil {
-			printDownStatus("Dolt", false, fmt.Sprintf("status check failed: %v", doltErr))
-			allOK = false
-		} else if downDryRun {
-			if doltRunning {
-				printDownStatus("Dolt", true, fmt.Sprintf("would stop (PID %d)", doltPid))
-			}
-		} else {
-			if doltRunning {
-				if err := doltserver.Stop(townRoot); err != nil {
-					printDownStatus("Dolt", false, err.Error())
-					allOK = false
-				} else {
-					printDownStatus("Dolt", true, fmt.Sprintf("stopped (was PID %d)", doltPid))
+	if doltserver.IsRemote() {
+		printDownStatus("Dolt", true, fmt.Sprintf("remote (%s), skipping stop", doltserver.RemoteAddr()))
+	} else {
+		doltCfg := doltserver.DefaultConfig(townRoot)
+		if _, statErr := os.Stat(doltCfg.DataDir); statErr == nil {
+			doltRunning, doltPid, doltErr := doltserver.IsRunning(townRoot)
+			if doltErr != nil {
+				printDownStatus("Dolt", false, fmt.Sprintf("status check failed: %v", doltErr))
+				allOK = false
+			} else if downDryRun {
+				if doltRunning {
+					printDownStatus("Dolt", true, fmt.Sprintf("would stop (PID %d)", doltPid))
 				}
 			} else {
-				printDownStatus("Dolt", true, "not running")
+				if doltRunning {
+					if err := doltserver.Stop(townRoot); err != nil {
+						printDownStatus("Dolt", false, err.Error())
+						allOK = false
+					} else {
+						printDownStatus("Dolt", true, fmt.Sprintf("stopped (was PID %d)", doltPid))
+					}
+				} else {
+					printDownStatus("Dolt", true, "not running")
+				}
 			}
 		}
 	}

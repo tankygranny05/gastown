@@ -216,6 +216,19 @@ func runStart(cmd *cobra.Command, args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if doltserver.IsRemote() {
+			if err := doltserver.CheckRemoteReachable(); err != nil {
+				mu.Lock()
+				fmt.Printf("  %s Remote Dolt server: %v\n", style.Dim.Render("○"), err)
+				mu.Unlock()
+			} else {
+				doltOK = true
+				mu.Lock()
+				fmt.Printf("  %s Dolt server (remote %s)\n", style.Bold.Render("✓"), doltserver.RemoteAddr())
+				mu.Unlock()
+			}
+			return
+		}
 		cfg := doltserver.DefaultConfig(townRoot)
 		if _, err := os.Stat(cfg.DataDir); os.IsNotExist(err) {
 			// No Dolt data dir — nothing to start

@@ -105,6 +105,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// 0. Dolt server (if configured)
 	go func() {
 		defer startupWg.Done()
+		if doltserver.IsRemote() {
+			if err := doltserver.CheckRemoteReachable(); err != nil {
+				doltDetail = err.Error()
+			} else {
+				doltOK = true
+				doltDetail = fmt.Sprintf("remote (%s)", doltserver.RemoteAddr())
+			}
+			return
+		}
 		cfg := doltserver.DefaultConfig(townRoot)
 		if _, err := os.Stat(cfg.DataDir); os.IsNotExist(err) {
 			doltSkipped = true

@@ -127,6 +127,43 @@ const (
 	DefaultMaxConnections = 50     // Conservative default to prevent connection storms
 )
 
+// IsRemote returns true when GT_DOLT_HOST is set, indicating that beads should
+// connect to an external Dolt SQL server rather than a locally-managed one.
+// When true, gt up/start/down/install must NOT call Start() or Stop() — those
+// try to exec a local `dolt sql-server` binary that doesn't exist on the remote.
+func IsRemote() bool {
+	return os.Getenv("GT_DOLT_HOST") != ""
+}
+
+// RemoteAddr returns the host:port address of the remote Dolt server configured
+// via GT_DOLT_HOST. If only a host is provided (no colon), DefaultPort is appended.
+// Returns "" when not in remote mode.
+func RemoteAddr() string {
+	host := os.Getenv("GT_DOLT_HOST")
+	if host == "" {
+		return ""
+	}
+	if !strings.Contains(host, ":") {
+		return fmt.Sprintf("%s:%d", host, DefaultPort)
+	}
+	return host
+}
+
+// CheckRemoteReachable verifies the remote Dolt server (GT_DOLT_HOST) is
+// accepting TCP connections. Returns nil if reachable, error otherwise.
+func CheckRemoteReachable() error {
+	addr := RemoteAddr()
+	if addr == "" {
+		return fmt.Errorf("GT_DOLT_HOST not set")
+	}
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		return fmt.Errorf("remote Dolt server not reachable at %s: %w", addr, err)
+	}
+	_ = conn.Close()
+	return nil
+}
+
 // metadataMu provides per-path mutexes for EnsureMetadata goroutine synchronization.
 // flock is inter-process only and cannot reliably synchronize goroutines within the
 // same process (the same process may acquire the same flock twice without blocking).
