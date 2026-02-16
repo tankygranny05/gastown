@@ -819,6 +819,47 @@ func (g *Git) ListBranches(pattern string) ([]string, error) {
 	return strings.Split(out, "\n"), nil
 }
 
+// ListRemoteBranches returns remote branches matching a pattern.
+// Pattern is matched against the short ref name (e.g., "polecat/*").
+// The remote prefix (e.g., "origin/") is stripped from the returned names.
+func (g *Git) ListRemoteBranches(remote, pattern string) ([]string, error) {
+	// Use for-each-ref on remote tracking refs
+	refPrefix := fmt.Sprintf("refs/remotes/%s/", remote)
+	args := []string{"for-each-ref", "--format=%(refname:short)", refPrefix}
+	out, err := g.run(args...)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+
+	prefix := remote + "/"
+	var matched []string
+	for _, ref := range strings.Split(out, "\n") {
+		// Strip the remote prefix (e.g., "origin/polecat/slit/..." -> "polecat/slit/...")
+		name := strings.TrimPrefix(ref, prefix)
+		if name == "HEAD" {
+			continue
+		}
+		if pattern == "" || matchBranchPattern(name, pattern) {
+			matched = append(matched, name)
+		}
+	}
+	return matched, nil
+}
+
+// matchBranchPattern matches a branch name against a glob-like pattern.
+// Supports simple patterns like "polecat/*" where * matches any characters.
+func matchBranchPattern(name, pattern string) bool {
+	// Simple glob: "polecat/*" means starts with "polecat/"
+	if strings.HasSuffix(pattern, "/*") {
+		prefix := strings.TrimSuffix(pattern, "/*") + "/"
+		return strings.HasPrefix(name, prefix)
+	}
+	return name == pattern
+}
+
 // ResetBranch force-updates a branch to point to a ref.
 // This is useful for resetting stale polecat branches to main.
 // NOTE: This uses `git branch -f` which fails on the currently checked-out branch.

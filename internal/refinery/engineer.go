@@ -724,12 +724,18 @@ func (e *Engineer) HandleMRInfoSuccess(mr *MRInfo, result ProcessResult) {
 		}
 	}
 
-	// 2. Delete source branch if configured (local only)
+	// 2. Delete source branch if configured (local + remote)
 	if e.config.DeleteMergedBranches && mr.Branch != "" {
 		if err := e.git.DeleteBranch(mr.Branch, true); err != nil {
-			_, _ = fmt.Fprintf(e.output, "[Engineer] Warning: failed to delete branch %s: %v\n", mr.Branch, err)
+			_, _ = fmt.Fprintf(e.output, "[Engineer] Warning: failed to delete local branch %s: %v\n", mr.Branch, err)
 		} else {
 			_, _ = fmt.Fprintf(e.output, "[Engineer] Deleted local branch: %s\n", mr.Branch)
+		}
+		// Also delete the remote branch to prevent accumulation (gt-qvw55)
+		if err := e.git.DeleteRemoteBranch("origin", mr.Branch); err != nil {
+			_, _ = fmt.Fprintf(e.output, "[Engineer] Warning: failed to delete remote branch %s: %v\n", mr.Branch, err)
+		} else {
+			_, _ = fmt.Fprintf(e.output, "[Engineer] Deleted remote branch: origin/%s\n", mr.Branch)
 		}
 	}
 
