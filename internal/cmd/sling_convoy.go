@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
@@ -134,6 +135,67 @@ func convoyTracksBead(beadsDir, convoyID, beadID string) bool {
 	}
 
 	return false
+}
+
+// ConvoyInfo holds convoy details for an issue's tracking convoy.
+type ConvoyInfo struct {
+	ID            string // Convoy bead ID (e.g., "hq-cv-abc")
+	Owned         bool   // true if convoy has gt:owned label
+	MergeStrategy string // "direct", "mr", "local", or "" (default = mr)
+}
+
+// IsOwnedDirect returns true if the convoy is owned with direct merge strategy.
+// This is the key check for skipping witness/refinery merge pipeline.
+func (c *ConvoyInfo) IsOwnedDirect() bool {
+	return c != nil && c.Owned && c.MergeStrategy == "direct"
+}
+
+// getConvoyInfoForIssue checks if an issue is tracked by a convoy and returns its info.
+// Returns nil if not tracked by any convoy.
+func getConvoyInfoForIssue(issueID string) *ConvoyInfo {
+	convoyID := isTrackedByConvoy(issueID)
+	if convoyID == "" {
+		return nil
+	}
+
+	townRoot, err := workspace.FindFromCwd()
+	if err != nil {
+		return nil
+	}
+	townBeads := filepath.Join(townRoot, ".beads")
+
+	// Get convoy details (labels + description) for ownership and merge strategy
+	showCmd := exec.Command("bd", "show", convoyID, "--json")
+	showCmd.Dir = townBeads
+	var stdout bytes.Buffer
+	showCmd.Stdout = &stdout
+
+	if err := showCmd.Run(); err != nil {
+		return &ConvoyInfo{ID: convoyID} // Return basic info even if details fail
+	}
+
+	var convoys []struct {
+		Labels      []string `json:"labels"`
+		Description string   `json:"description"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &convoys); err != nil || len(convoys) == 0 {
+		return &ConvoyInfo{ID: convoyID}
+	}
+
+	info := &ConvoyInfo{ID: convoyID}
+
+	// Check for gt:owned label
+	for _, label := range convoys[0].Labels {
+		if label == "gt:owned" {
+			info.Owned = true
+			break
+		}
+	}
+
+	// Parse merge strategy from description
+	info.MergeStrategy = parseConvoyMergeStrategy(convoys[0].Description)
+
+	return info
 }
 
 // createAutoConvoy creates an auto-convoy for a single issue and tracks it.

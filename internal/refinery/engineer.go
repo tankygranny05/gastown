@@ -1008,6 +1008,14 @@ func (e *Engineer) ListReadyMRs() ([]*MRInfo, error) {
 			continue
 		}
 
+		// Belt-and-suspenders: skip MRs labeled gt:owned-direct.
+		// These MRs shouldn't exist (gt done skips MR creation for owned+direct
+		// convoys), but if one slips through, the refinery should not process it.
+		if beads.HasLabel(issue, "gt:owned-direct") {
+			_, _ = fmt.Fprintf(e.output, "[Engineer] Skipping MR %s: owned+direct convoy (belt-and-suspenders)\n", issue.ID)
+			continue
+		}
+
 		fields := beads.ParseMRFields(issue)
 		if fields == nil {
 			continue // Skip issues without MR fields
