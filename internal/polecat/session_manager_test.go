@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/tmux"
 )
@@ -26,13 +27,14 @@ func requireTmux(t *testing.T) {
 func TestSessionName(t *testing.T) {
 	r := &rig.Rig{
 		Name:     "gastown",
+		Config:   &config.BeadsConfig{Prefix: "gt"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
 
 	name := m.SessionName("Toast")
-	if name != "gt-gastown-Toast" {
-		t.Errorf("sessionName = %q, want gt-gastown-Toast", name)
+	if name != "gt-Toast" {
+		t.Errorf("sessionName = %q, want gt-Toast", name)
 	}
 }
 
@@ -81,6 +83,7 @@ func TestHasPolecat(t *testing.T) {
 func TestStartPolecatNotFound(t *testing.T) {
 	r := &rig.Rig{
 		Name:     "gastown",
+		Config:   &config.BeadsConfig{Prefix: "gt"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
@@ -96,6 +99,7 @@ func TestIsRunningNoSession(t *testing.T) {
 
 	r := &rig.Rig{
 		Name:     "gastown",
+		Config:   &config.BeadsConfig{Prefix: "gt"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
@@ -114,6 +118,7 @@ func TestSessionManagerListEmpty(t *testing.T) {
 
 	r := &rig.Rig{
 		Name:     "test-rig-unlikely-name",
+		Config:   &config.BeadsConfig{Prefix: "trun"},
 		Polecats: []string{},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
@@ -132,6 +137,7 @@ func TestStopNotFound(t *testing.T) {
 
 	r := &rig.Rig{
 		Name:     "test-rig",
+		Config:   &config.BeadsConfig{Prefix: "tr"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
@@ -147,6 +153,7 @@ func TestCaptureNotFound(t *testing.T) {
 
 	r := &rig.Rig{
 		Name:     "test-rig",
+		Config:   &config.BeadsConfig{Prefix: "tr"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)
@@ -162,6 +169,7 @@ func TestInjectNotFound(t *testing.T) {
 
 	r := &rig.Rig{
 		Name:     "test-rig",
+		Config:   &config.BeadsConfig{Prefix: "tr"},
 		Polecats: []string{"Toast"},
 	}
 	m := NewSessionManager(tmux.NewTmux(), r)

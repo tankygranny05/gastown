@@ -22,6 +22,7 @@ import (
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/runtime"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
@@ -1016,7 +1017,7 @@ func (m *Manager) AllocateName() (string, error) {
 	// lingers (race between cleanup and allocation). This extra check ensures
 	// no stale session blocks the new polecat's session creation.
 	if m.tmux != nil {
-		sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, name)
+		sessionName := session.PolecatSessionName(m.rig.Config.Prefix, name)
 		if alive, _ := m.tmux.HasSession(sessionName); alive {
 			_ = m.tmux.KillSessionWithProcesses(sessionName)
 		}
@@ -1245,7 +1246,7 @@ func (m *Manager) reconcilePoolInternal() {
 	if m.tmux != nil {
 		poolNames := m.namePool.getNames()
 		for _, name := range poolNames {
-			sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, name)
+			sessionName := session.PolecatSessionName(m.rig.Config.Prefix, name)
 			hasSession, _ := m.tmux.HasSession(sessionName)
 			if hasSession {
 				namesWithSessions = append(namesWithSessions, name)
@@ -1281,7 +1282,7 @@ func (m *Manager) ReconcilePoolWith(namesWithDirs, namesWithSessions []string) {
 	// Use KillSessionWithProcesses to ensure all descendant processes are killed.
 	if m.tmux != nil {
 		for _, name := range namesWithSessions {
-			sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, name)
+			sessionName := session.PolecatSessionName(m.rig.Config.Prefix, name)
 			if !dirSet[name] {
 				// Orphan: session exists but no directory
 				_ = m.tmux.KillSessionWithProcesses(sessionName)
@@ -1588,7 +1589,7 @@ func (m *Manager) loadFromBeads(name string) (*Polecat, error) {
 		issueID = issue.ID
 		state = StateWorking
 	} else if m.tmux != nil {
-		sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, name)
+		sessionName := session.PolecatSessionName(m.rig.Config.Prefix, name)
 		if running, _ := m.tmux.HasSession(sessionName); running {
 			state = StateWorking
 		}
@@ -1703,8 +1704,8 @@ func (m *Manager) DetectStalePolecats(threshold int) ([]*StalenessInfo, error) {
 		}
 
 		// Check for active tmux session
-		// Session name follows pattern: gt-<rig>-<polecat>
-		sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, p.Name)
+		// Session name follows pattern: <prefix>-<polecat>
+		sessionName := session.PolecatSessionName(m.rig.Config.Prefix, p.Name)
 		info.HasActiveSession = checkTmuxSession(sessionName)
 
 		// Check how far behind main

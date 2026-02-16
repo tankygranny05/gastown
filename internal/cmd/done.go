@@ -17,6 +17,7 @@ import (
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/polecat"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/townlog"
@@ -1146,7 +1147,7 @@ func selfKillSession(townRoot string, roleInfo RoleInfo) error {
 		return fmt.Errorf("cannot determine session: rig=%q, polecat=%q", rigName, polecatName)
 	}
 
-	sessionName := fmt.Sprintf("gt-%s-%s", rigName, polecatName)
+	sessionName := session.PolecatSessionName(session.PrefixForRig(rigName), polecatName)
 	agentID := fmt.Sprintf("%s/polecats/%s", rigName, polecatName)
 
 	// Log to townlog (human-readable audit log)

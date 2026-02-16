@@ -19,6 +19,7 @@ import (
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -1079,7 +1080,7 @@ func discoverRigAgents(allSessions map[string]bool, r *rig.Rig, crews []string, 
 		defs = append(defs, agentDef{
 			name:    "refinery",
 			address: r.Name + "/refinery",
-			session: fmt.Sprintf("gt-%s-refinery", r.Name),
+			session: session.RefinerySessionName(session.PrefixForRig(r.Name)),
 			role:    "refinery",
 			beadID:  beads.RefineryBeadIDWithPrefix(prefix, r.Name),
 		})
@@ -1090,7 +1091,7 @@ func discoverRigAgents(allSessions map[string]bool, r *rig.Rig, crews []string, 
 		defs = append(defs, agentDef{
 			name:    name,
 			address: r.Name + "/" + name,
-			session: fmt.Sprintf("gt-%s-%s", r.Name, name),
+			session: session.PolecatSessionName(session.PrefixForRig(r.Name), name),
 			role:    "polecat",
 			beadID:  beads.PolecatBeadIDWithPrefix(prefix, r.Name, name),
 		})

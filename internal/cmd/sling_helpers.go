@@ -15,6 +15,7 @@ import (
 	"github.com/steveyegge/gastown/internal/cli"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/constants"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -455,7 +456,7 @@ func wakeRigAgents(rigName string) {
 
 	// Nudge witness to clear any backoff
 	t := tmux.NewTmux()
-	witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+	witnessSession := session.WitnessSessionName(session.PrefixForRig(rigName))
 
 	// Silent nudge - session might not exist yet
 	_ = t.NudgeSession(witnessSession, "Polecat dispatched - check for work")
@@ -465,7 +466,7 @@ func wakeRigAgents(rigName string) {
 // This ensures the refinery picks up the new merge request promptly
 // instead of waiting for its next poll cycle.
 func nudgeRefinery(rigName, message string) {
-	refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+	refinerySession := session.RefinerySessionName(session.PrefixForRig(rigName))
 
 	// Test hook: log nudge for test observability (same pattern as GT_TEST_ATTACHED_MOLECULE_LOG)
 	if logPath := os.Getenv("GT_TEST_NUDGE_LOG"); logPath != "" {

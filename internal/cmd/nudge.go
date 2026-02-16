@@ -185,9 +185,9 @@ func runNudge(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("cannot determine rig for %s shortcut (not in a rig context)", target)
 		}
 		if target == "witness" {
-			target = session.WitnessSessionName(roleInfo.Rig)
+			target = session.WitnessSessionName(session.PrefixForRig(roleInfo.Rig))
 		} else {
-			target = session.RefinerySessionName(roleInfo.Rig)
+			target = session.RefinerySessionName(session.PrefixForRig(roleInfo.Rig))
 		}
 	}
 
@@ -587,15 +587,15 @@ func addressToAgentBeadID(address string) string {
 
 	switch role {
 	case "witness":
-		return fmt.Sprintf("gt-%s-witness", rig)
+		return session.WitnessSessionName(session.PrefixForRig(rig))
 	case "refinery":
-		return fmt.Sprintf("gt-%s-refinery", rig)
+		return session.RefinerySessionName(session.PrefixForRig(rig))
 	default:
 		// Assume polecat
 		if strings.HasPrefix(role, "crew/") {
 			crewName := strings.TrimPrefix(role, "crew/")
-			return fmt.Sprintf("gt-%s-crew-%s", rig, crewName)
+			return session.CrewSessionName(session.PrefixForRig(rig), crewName)
 		}
-		return fmt.Sprintf("gt-%s-polecat-%s", rig, role)
+		return session.PolecatSessionName(session.PrefixForRig(rig), role)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/polecat"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/suggest"
 	"github.com/steveyegge/gastown/internal/tmux"
@@ -664,7 +665,7 @@ func runSessionCheck(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			polecatName := entry.Name()
-			sessionName := fmt.Sprintf("gt-%s-%s", r.Name, polecatName)
+			sessionName := session.PolecatSessionName(session.PrefixForRig(r.Name), polecatName)
 			totalChecked++
 
 			// Check if session exists

@@ -1120,9 +1120,9 @@ func agentAddressToIDs(address string) (beadID, sessionName string, err error) {
 		rig, role := parts[0], parts[1]
 		switch role {
 		case "witness":
-			return fmt.Sprintf("gt-%s-witness", rig), fmt.Sprintf("gt-%s-witness", rig), nil
+			return session.WitnessSessionName(session.PrefixForRig(rig)), session.WitnessSessionName(session.PrefixForRig(rig)), nil
 		case "refinery":
-			return fmt.Sprintf("gt-%s-refinery", rig), fmt.Sprintf("gt-%s-refinery", rig), nil
+			return session.RefinerySessionName(session.PrefixForRig(rig)), session.RefinerySessionName(session.PrefixForRig(rig)), nil
 		default:
 			return "", "", fmt.Errorf("unknown role: %s", role)
 		}
@@ -1131,9 +1131,9 @@ func agentAddressToIDs(address string) (beadID, sessionName string, err error) {
 		rig, agentType, name := parts[0], parts[1], parts[2]
 		switch agentType {
 		case "polecats":
-			return fmt.Sprintf("gt-%s-polecat-%s", rig, name), fmt.Sprintf("gt-%s-%s", rig, name), nil
+			return session.PolecatSessionName(session.PrefixForRig(rig), name), session.PolecatSessionName(session.PrefixForRig(rig), name), nil
 		case "crew":
-			return fmt.Sprintf("gt-%s-crew-%s", rig, name), fmt.Sprintf("gt-%s-crew-%s", rig, name), nil
+			return session.CrewSessionName(session.PrefixForRig(rig), name), session.CrewSessionName(session.PrefixForRig(rig), name), nil
 		default:
 			return "", "", fmt.Errorf("unknown agent type: %s", agentType)
 		}

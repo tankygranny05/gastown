@@ -259,20 +259,20 @@ func runLiveCosts() error {
 	var costs []SessionCost
 	var total float64
 
-	for _, session := range sessions {
-		// Only process Gas Town sessions (start with "gt-")
-		if !strings.HasPrefix(session, constants.SessionPrefix) {
+	for _, sess := range sessions {
+		// Only process Gas Town sessions (parseable by session name parser)
+		if _, err := session.ParseSessionName(sess); err != nil {
 			continue
 		}
 
 		// Parse session name to get role/rig/worker
-		role, rig, worker := parseSessionName(session)
+		role, rig, worker := parseSessionName(sess)
 
 		// Get working directory of the session
-		workDir, err := getTmuxSessionWorkDir(session)
+		workDir, err := getTmuxSessionWorkDir(sess)
 		if err != nil {
 			if costsVerbose {
-				fmt.Fprintf(os.Stderr, "[costs] could not get workdir for %s: %v\n", session, err)
+				fmt.Fprintf(os.Stderr, "[costs] could not get workdir for %s: %v\n", sess, err)
 			}
 			continue
 		}
@@ -281,17 +281,17 @@ func runLiveCosts() error {
 		cost, err := extractCostFromWorkDir(workDir)
 		if err != nil {
 			if costsVerbose {
-				fmt.Fprintf(os.Stderr, "[costs] could not extract cost for %s: %v\n", session, err)
+				fmt.Fprintf(os.Stderr, "[costs] could not extract cost for %s: %v\n", sess, err)
 			}
 			// Still include the session with zero cost
 			cost = 0.0
 		}
 
 		// Check if an agent appears to be running
-		running := t.IsAgentRunning(session)
+		running := t.IsAgentRunning(sess)
 
 		costs = append(costs, SessionCost{
-			Session: session,
+			Session: sess,
 			Role:    role,
 			Rig:     rig,
 			Worker:  worker,
@@ -645,7 +645,11 @@ func queryDigestBeads(days int) ([]CostEntry, error) {
 func parseSessionName(sess string) (role, rig, worker string) {
 	identity, err := session.ParseSessionName(sess)
 	if err != nil {
-		return "unknown", "", strings.TrimPrefix(sess, constants.SessionPrefix)
+		// Strip prefix (everything up to first hyphen) for fallback worker name
+		if idx := strings.Index(sess, "-"); idx >= 0 {
+			return "unknown", "", sess[idx+1:]
+		}
+		return "unknown", "", sess
 	}
 
 	switch identity.Role {
@@ -1058,12 +1062,12 @@ func deriveSessionName() string {
 
 	// Polecat: gt-{rig}-{polecat}
 	if polecat != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-%s", rig, polecat)
+		return session.PolecatSessionName(session.PrefixForRig(rig), polecat)
 	}
 
 	// Crew: gt-{rig}-crew-{crew}
 	if crew != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-crew-%s", rig, crew)
+		return session.CrewSessionName(session.PrefixForRig(rig), crew)
 	}
 
 	// Town-level roles (mayor, deacon): gt-{town}-{role} or gt-{role}
@@ -1077,7 +1081,7 @@ func deriveSessionName() string {
 
 	// Rig-based roles (witness, refinery): gt-{rig}-{role}
 	if role != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-%s", rig, role)
+		return fmt.Sprintf("%s-%s", session.PrefixForRig(rig), role)
 	}
 
 	return ""
@@ -1094,11 +1098,10 @@ func detectCurrentTmuxSession() string {
 		return ""
 	}
 
-	session := strings.TrimSpace(string(output))
-	// Only return if it looks like a Gas Town session
-	// Accept both gt- (rig sessions) and hq- (town-level sessions like hq-mayor)
-	if strings.HasPrefix(session, constants.SessionPrefix) || strings.HasPrefix(session, constants.HQSessionPrefix) {
-		return session
+	sessName := strings.TrimSpace(string(output))
+	// Only return if it looks like a Gas Town session (parseable session name)
+	if _, err := session.ParseSessionName(sessName); err == nil {
+		return sessName
 	}
 	return ""
 }

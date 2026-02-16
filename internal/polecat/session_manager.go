@@ -106,7 +106,7 @@ type SessionInfo struct {
 // Validates that the polecat name doesn't contain the rig prefix to prevent
 // double-prefix bugs (e.g., "gt-gastown_manager-gastown_manager-142").
 func (m *SessionManager) SessionName(polecat string) string {
-	sessionName := fmt.Sprintf("gt-%s-%s", m.rig.Name, polecat)
+	sessionName := session.PolecatSessionName(m.rig.Config.Prefix, polecat)
 
 	// Validate session name format to detect double-prefix bugs
 	if err := validateSessionName(sessionName, m.rig.Name); err != nil {
@@ -500,7 +500,7 @@ func (m *SessionManager) List() ([]SessionInfo, error) {
 		return nil, err
 	}
 
-	prefix := fmt.Sprintf("gt-%s-", m.rig.Name)
+	prefix := m.rig.Config.Prefix + "-"
 	var infos []SessionInfo
 
 	for _, sessionID := range sessions {

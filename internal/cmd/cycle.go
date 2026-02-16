@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/session"
 )
 
 // cycleSession is the --session flag for cycle next/prev commands.
@@ -139,8 +139,8 @@ func parseRigInfraSession(session string) string {
 // cycleRigInfraSession cycles between witness and refinery sessions for a rig.
 func cycleRigInfraSession(direction int, currentSession, rig string) error {
 	// Find running infra sessions for this rig
-	witnessSession := fmt.Sprintf("gt-%s-witness", rig)
-	refinerySession := fmt.Sprintf("gt-%s-refinery", rig)
+	witnessSession := session.WitnessSessionName(session.PrefixForRig(rig))
+	refinerySession := session.RefinerySessionName(session.PrefixForRig(rig))
 
 	var sessions []string
 	allSessions, err := listTmuxSessions()

@@ -365,21 +365,21 @@ func resolveRoleToSession(role string) (string, error) {
 		if rig == "" || crewName == "" {
 			return "", fmt.Errorf("cannot determine crew identity - run from crew directory or specify GT_RIG/GT_CREW")
 		}
-		return fmt.Sprintf("gt-%s-crew-%s", rig, crewName), nil
+		return session.CrewSessionName(session.PrefixForRig(rig), crewName), nil
 
 	case "witness", "wit":
 		rig := os.Getenv("GT_RIG")
 		if rig == "" {
 			return "", fmt.Errorf("cannot determine rig - set GT_RIG or run from rig context")
 		}
-		return fmt.Sprintf("gt-%s-witness", rig), nil
+		return session.WitnessSessionName(session.PrefixForRig(rig)), nil
 
 	case "refinery", "ref":
 		rig := os.Getenv("GT_RIG")
 		if rig == "" {
 			return "", fmt.Errorf("cannot determine rig - set GT_RIG or run from rig context")
 		}
-		return fmt.Sprintf("gt-%s-refinery", rig), nil
+		return session.RefinerySessionName(session.PrefixForRig(rig)), nil
 
 	default:
 		// Assume it's a direct session name (e.g., gt-gastown-crew-max)
@@ -401,14 +401,14 @@ func resolvePathToSession(path string) (string, error) {
 	if len(parts) == 3 && parts[1] == "crew" {
 		rig := parts[0]
 		name := parts[2]
-		return fmt.Sprintf("gt-%s-crew-%s", rig, name), nil
+		return session.CrewSessionName(session.PrefixForRig(rig), name), nil
 	}
 
 	// Handle <rig>/polecats/<name> format (explicit polecat path)
 	if len(parts) == 3 && parts[1] == "polecats" {
 		rig := parts[0]
 		name := strings.ToLower(parts[2]) // normalize polecat name
-		return fmt.Sprintf("gt-%s-%s", rig, name), nil
+		return session.PolecatSessionName(session.PrefixForRig(rig), name), nil
 	}
 
 	// Handle <rig>/<role-or-polecat> format
@@ -420,9 +420,9 @@ func resolvePathToSession(path string) (string, error) {
 		// Check for known roles first
 		switch secondLower {
 		case "witness":
-			return fmt.Sprintf("gt-%s-witness", rig), nil
+			return session.WitnessSessionName(session.PrefixForRig(rig)), nil
 		case "refinery":
-			return fmt.Sprintf("gt-%s-refinery", rig), nil
+			return session.RefinerySessionName(session.PrefixForRig(rig)), nil
 		case "crew":
 			// Just "<rig>/crew" without a name - need more info
 			return "", fmt.Errorf("crew path requires name: %s/crew/<name>", rig)
@@ -437,11 +437,11 @@ func resolvePathToSession(path string) (string, error) {
 			if townRoot != "" {
 				crewPath := filepath.Join(townRoot, rig, "crew", second)
 				if info, err := os.Stat(crewPath); err == nil && info.IsDir() {
-					return fmt.Sprintf("gt-%s-crew-%s", rig, second), nil
+					return session.CrewSessionName(session.PrefixForRig(rig), second), nil
 				}
 			}
 			// Not a crew member - treat as polecat name (e.g., gastown/nux)
-			return fmt.Sprintf("gt-%s-%s", rig, secondLower), nil
+			return session.PolecatSessionName(session.PrefixForRig(rig), secondLower), nil
 		}
 	}
 

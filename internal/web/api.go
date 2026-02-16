@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/session"
 )
 
 
@@ -1566,7 +1568,7 @@ func (h *APIHandler) handleCrew(w http.ResponseWriter, r *http.Request) {
 
 	// Convert to CrewMember format with state detection
 	for _, c := range crewData {
-		sessionName := fmt.Sprintf("gt-%s-crew-%s", c.Rig, c.Name)
+		sessionName := session.CrewSessionName(session.PrefixForRig(c.Rig), c.Name)
 		state, lastActive, sessionStatus := h.detectCrewState(ctx, sessionName, c.Hook)
 
 		member := CrewMember{

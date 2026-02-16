@@ -250,7 +250,11 @@ func (c *OrphanSessionCheck) isValidSession(sess string, validRigs []string, may
 	if !rigFound && identity.Role == session.RolePolecat {
 		// Try alternate rig interpretations: check if any valid rig
 		// is a prefix of the session suffix (after gt-)
-		suffix := strings.TrimPrefix(sess, session.Prefix)
+		idx := strings.Index(sess, "-")
+		if idx < 0 {
+			return false
+		}
+		suffix := sess[idx+1:]
 		for _, r := range validRigs {
 			if strings.HasPrefix(suffix, r+"-") {
 				rigFound = true

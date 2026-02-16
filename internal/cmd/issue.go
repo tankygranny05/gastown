@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
 )
 
@@ -128,10 +129,10 @@ func detectCurrentSession() string {
 
 	if rig != "" {
 		if polecat != "" {
-			return fmt.Sprintf("gt-%s-%s", rig, polecat)
+			return session.PolecatSessionName(session.PrefixForRig(rig), polecat)
 		}
 		if crew != "" {
-			return fmt.Sprintf("gt-%s-crew-%s", rig, crew)
+			return session.CrewSessionName(session.PrefixForRig(rig), crew)
 		}
 	}
 

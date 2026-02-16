@@ -412,7 +412,7 @@ func (f *LiveConvoyFetcher) getSessionActivityForAssignee(assignee string) *time
 	polecat := parts[2]
 
 	// Construct session name
-	sessionName := fmt.Sprintf("gt-%s-%s", rig, polecat)
+	sessionName := session.PolecatSessionName(session.PrefixForRig(rig), polecat)
 
 	// Query tmux for session activity
 	// Format: session_activity returns unix timestamp

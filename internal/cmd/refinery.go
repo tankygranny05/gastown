@@ -11,6 +11,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/refinery"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -503,7 +504,7 @@ func runRefineryAttach(cmd *cobra.Command, args []string) error {
 	}
 
 	// Session name follows the same pattern as refinery manager
-	sessionID := fmt.Sprintf("gt-%s-refinery", rigName)
+	sessionID := session.RefinerySessionName(session.PrefixForRig(rigName))
 
 	// Check if session exists
 	t := tmux.NewTmux()

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/steveyegge/gastown/internal/beads"
+	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/rig"
 )
@@ -1079,15 +1080,16 @@ func TestAddWithOptions_SettingsInstalledInPolecatsDir(t *testing.T) {
 func TestOverflowNameSessionFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create minimal rig
+	// Create minimal rig with prefix-based config
 	rigPath := filepath.Join(tmpDir, "testrig")
 	if err := os.MkdirAll(rigPath, 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	r := &rig.Rig{
-		Name: "testrig",
-		Path: rigPath,
+		Name:   "testrig",
+		Path:   rigPath,
+		Config: &config.BeadsConfig{Prefix: "tr"},
 	}
 
 	// Create name pool with small size to trigger overflow quickly
@@ -1116,14 +1118,14 @@ func TestOverflowNameSessionFormat(t *testing.T) {
 	sessMgr := NewSessionManager(nil, r)
 	sessionName := sessMgr.SessionName(overflowName)
 
-	// Verify session name is gt-testrig-3, NOT gt-testrig-testrig-3
-	expected := "gt-testrig-3"
+	// Verify session name uses prefix-based naming: tr-3
+	expected := "tr-3"
 	if sessionName != expected {
-		t.Errorf("expected session name %s, got %s (double-prefix bug!)", expected, sessionName)
+		t.Errorf("expected session name %s, got %s", expected, sessionName)
 	}
 
-	// Verify no double-prefix
-	if strings.Contains(sessionName, "testrig-testrig") {
-		t.Errorf("double-prefix detected in session name: %s", sessionName)
+	// Verify no double-prefix (rig name should not appear in session name)
+	if strings.Contains(sessionName, "testrig") {
+		t.Errorf("rig name should not appear in prefix-based session name: %s", sessionName)
 	}
 }

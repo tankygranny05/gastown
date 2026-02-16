@@ -544,8 +544,8 @@ func runRigList(cmd *cobra.Command, args []string) error {
 
 		opState, _ := getRigOperationalState(townRoot, name)
 
-		witnessSession := fmt.Sprintf("gt-%s-witness", name)
-		refinerySession := fmt.Sprintf("gt-%s-refinery", name)
+		witnessSession := session.WitnessSessionName(session.PrefixForRig(name))
+		refinerySession := session.RefinerySessionName(session.PrefixForRig(name))
 		witnessRunning, _ := t.HasSession(witnessSession)
 		refineryRunning, _ := t.HasSession(refinerySession)
 
@@ -1091,15 +1091,15 @@ func assigneeToSessionName(assignee string) (sessionName string, isPersistent bo
 	switch len(parts) {
 	case 2:
 		// rig/polecatName -> gt-rig-polecatName
-		return fmt.Sprintf("gt-%s-%s", parts[0], parts[1]), false
+		return session.PolecatSessionName(session.PrefixForRig(parts[0]), parts[1]), false
 	case 3:
 		// rig/crew/name -> gt-rig-crew-name
 		if parts[1] == "crew" {
-			return fmt.Sprintf("gt-%s-crew-%s", parts[0], parts[2]), true
+			return session.CrewSessionName(session.PrefixForRig(parts[0]), parts[2]), true
 		}
 		// rig/polecats/name -> gt-rig-name
 		if parts[1] == "polecats" {
-			return fmt.Sprintf("gt-%s-%s", parts[0], parts[2]), false
+			return session.PolecatSessionName(session.PrefixForRig(parts[0]), parts[2]), false
 		}
 		// Other 3-part formats not recognized
 		return "", false
@@ -1146,7 +1146,7 @@ func runRigBoot(cmd *cobra.Command, args []string) error {
 
 	// 1. Start the witness
 	// Check actual tmux session, not state file (may be stale)
-	witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+	witnessSession := session.WitnessSessionName(session.PrefixForRig(rigName))
 	witnessRunning, _ := t.HasSession(witnessSession)
 	if witnessRunning {
 		skipped = append(skipped, "witness (already running)")
@@ -1166,7 +1166,7 @@ func runRigBoot(cmd *cobra.Command, args []string) error {
 
 	// 2. Start the refinery
 	// Check actual tmux session, not state file (may be stale)
-	refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+	refinerySession := session.RefinerySessionName(session.PrefixForRig(rigName))
 	refineryRunning, _ := t.HasSession(refinerySession)
 	if refineryRunning {
 		skipped = append(skipped, "refinery (already running)")
@@ -1235,7 +1235,7 @@ func runRigStart(cmd *cobra.Command, args []string) error {
 		hasError := false
 
 		// 1. Start the witness
-		witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+		witnessSession := session.WitnessSessionName(session.PrefixForRig(rigName))
 		witnessRunning, _ := t.HasSession(witnessSession)
 		if witnessRunning {
 			skipped = append(skipped, "witness")
@@ -1255,7 +1255,7 @@ func runRigStart(cmd *cobra.Command, args []string) error {
 		}
 
 		// 2. Start the refinery
-		refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+		refinerySession := session.RefinerySessionName(session.PrefixForRig(rigName))
 		refineryRunning, _ := t.HasSession(refinerySession)
 		if refineryRunning {
 			skipped = append(skipped, "refinery")
@@ -1506,7 +1506,7 @@ func runRigStatus(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Printf(" (%d)\n", len(polecats))
 		for _, p := range polecats {
-			sessionName := fmt.Sprintf("gt-%s-%s", rigName, p.Name)
+			sessionName := session.PolecatSessionName(session.PrefixForRig(rigName), p.Name)
 			hasSession, _ := t.HasSession(sessionName)
 
 			sessionIcon := style.Dim.Render("○")
@@ -1812,7 +1812,7 @@ func runRigRestart(cmd *cobra.Command, args []string) error {
 		var skipped []string
 
 		// 1. Start the witness
-		witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+		witnessSession := session.WitnessSessionName(session.PrefixForRig(rigName))
 		witnessRunning, _ := t.HasSession(witnessSession)
 		if witnessRunning {
 			skipped = append(skipped, "witness")
@@ -1831,7 +1831,7 @@ func runRigRestart(cmd *cobra.Command, args []string) error {
 		}
 
 		// 2. Start the refinery
-		refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+		refinerySession := session.RefinerySessionName(session.PrefixForRig(rigName))
 		refineryRunning, _ := t.HasSession(refinerySession)
 		if refineryRunning {
 			skipped = append(skipped, "refinery")
@@ -1958,7 +1958,7 @@ func syncRigHooks(townRoot, rigName string) error {
 // All rig sessions share the "gt-{rig}-" prefix, so this catches witness,
 // refinery, polecat, and crew sessions in one pass.
 func findRigSessions(t *tmux.Tmux, rigName string) ([]string, error) {
-	prefix := session.Prefix + rigName + "-"
+	prefix := session.PrefixForRig(rigName) + "-"
 	all, err := t.ListSessions()
 	if err != nil {
 		return nil, fmt.Errorf("listing tmux sessions: %w", err)

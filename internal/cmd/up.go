@@ -21,6 +21,7 @@ import (
 	"github.com/steveyegge/gastown/internal/polecat"
 	"github.com/steveyegge/gastown/internal/refinery"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/wisp"
@@ -226,7 +227,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		for _, rigName := range rigs {
 			crewStarted, crewErrors := startCrewFromSettings(townRoot, rigName)
 			for _, name := range crewStarted {
-				printStatus(fmt.Sprintf("Crew (%s/%s)", rigName, name), true, fmt.Sprintf("gt-%s-crew-%s", rigName, name))
+				printStatus(fmt.Sprintf("Crew (%s/%s)", rigName, name), true, session.CrewSessionName(session.PrefixForRig(rigName), name))
 			}
 			for name, err := range crewErrors {
 				printStatus(fmt.Sprintf("Crew (%s/%s)", rigName, name), false, err.Error())
@@ -238,7 +239,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		for _, rigName := range rigs {
 			polecatsStarted, polecatErrors := startPolecatsWithWork(townRoot, rigName)
 			for _, name := range polecatsStarted {
-				printStatus(fmt.Sprintf("Polecat (%s/%s)", rigName, name), true, fmt.Sprintf("gt-%s-polecat-%s", rigName, name))
+				printStatus(fmt.Sprintf("Polecat (%s/%s)", rigName, name), true, session.PolecatSessionName(session.PrefixForRig(rigName), name))
 			}
 			for name, err := range polecatErrors {
 				printStatus(fmt.Sprintf("Polecat (%s/%s)", rigName, name), false, err.Error())

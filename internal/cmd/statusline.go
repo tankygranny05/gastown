@@ -11,6 +11,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
@@ -487,7 +488,7 @@ func runWitnessStatusLine(t *tmux.Tmux, rigName string) error {
 
 	// Get town root from witness pane's working directory
 	var townRoot string
-	sessionName := fmt.Sprintf("gt-%s-witness", rigName)
+	sessionName := session.WitnessSessionName(session.PrefixForRig(rigName))
 	paneDir, err := t.GetPaneWorkDir(sessionName)
 	if err == nil && paneDir != "" {
 		townRoot, _ = workspace.Find(paneDir)
@@ -560,7 +561,7 @@ func runRefineryStatusLine(t *tmux.Tmux, rigName string) error {
 
 	// Get town root from refinery pane's working directory
 	var townRoot string
-	sessionName := fmt.Sprintf("gt-%s-refinery", rigName)
+	sessionName := session.RefinerySessionName(session.PrefixForRig(rigName))
 	paneDir, err := t.GetPaneWorkDir(sessionName)
 	if err == nil && paneDir != "" {
 		townRoot, _ = workspace.Find(paneDir)

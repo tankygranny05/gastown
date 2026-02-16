@@ -10,6 +10,7 @@ import (
 	"github.com/steveyegge/gastown/internal/crew"
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
 
@@ -40,7 +41,7 @@ func getCrewManager(rigName string) (*crew.Manager, *rig.Rig, error) {
 
 // crewSessionName generates the tmux session name for a crew worker.
 func crewSessionName(rigName, crewName string) string {
-	return fmt.Sprintf("gt-%s-crew-%s", rigName, crewName)
+	return session.CrewSessionName(session.PrefixForRig(rigName), crewName)
 }
 
 // crewDetection holds the result of detecting crew workspace from cwd.
@@ -132,7 +133,7 @@ func findRigCrewSessions(rigName string) ([]string, error) { //nolint:unparam //
 		return nil, nil
 	}
 
-	prefix := fmt.Sprintf("gt-%s-crew-", rigName)
+	prefix := session.PrefixForRig(rigName) + "-crew-"
 	var sessions []string
 
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {

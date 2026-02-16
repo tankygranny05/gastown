@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -341,7 +342,7 @@ func targetToSessionName(target string) (string, error) {
 	switch {
 	case len(parts) == 3 && parts[1] == "polecats":
 		// gastown/polecats/alpha -> gt-gastown-alpha
-		return fmt.Sprintf("gt-%s-%s", parts[0], parts[2]), nil
+		return session.PolecatSessionName(session.PrefixForRig(parts[0]), parts[2]), nil
 	case len(parts) == 2 && parts[0] == "deacon" && parts[1] == "dogs":
 		// This shouldn't happen - need dog name
 		return "", fmt.Errorf("invalid target: need dog name (e.g., deacon/dogs/alpha)")

@@ -325,12 +325,14 @@ func (d *Daemon) identityToSession(identity string) string {
 		return session.MayorSessionName()
 	case "deacon":
 		return session.DeaconSessionName()
-	case "witness", "refinery":
-		return fmt.Sprintf("gt-%s-%s", parsed.RigName, parsed.RoleType)
+	case "witness":
+		return session.WitnessSessionName(session.PrefixForRig(parsed.RigName))
+	case "refinery":
+		return session.RefinerySessionName(session.PrefixForRig(parsed.RigName))
 	case "crew":
-		return fmt.Sprintf("gt-%s-crew-%s", parsed.RigName, parsed.AgentName)
+		return session.CrewSessionName(session.PrefixForRig(parsed.RigName), parsed.AgentName)
 	case "polecat":
-		return fmt.Sprintf("gt-%s-%s", parsed.RigName, parsed.AgentName)
+		return session.PolecatSessionName(session.PrefixForRig(parsed.RigName), parsed.AgentName)
 	default:
 		return ""
 	}
@@ -958,7 +960,7 @@ func (d *Daemon) checkRigGUPPViolations(rigName string) {
 		// Per gt-zecmc: derive running state from tmux, not agent_state
 		// Extract polecat name from agent ID (<prefix>-<rig>-polecat-<name> -> <name>)
 		polecatName := strings.TrimPrefix(agent.ID, prefix)
-		sessionName := fmt.Sprintf("gt-%s-%s", rigName, polecatName)
+		sessionName := session.PolecatSessionName(session.PrefixForRig(rigName), polecatName)
 
 		// Check if tmux session exists and agent is running
 		if d.tmux.IsAgentAlive(sessionName) {
@@ -1052,7 +1054,7 @@ func (d *Daemon) checkRigOrphanedWork(rigName string) {
 
 		// Check if tmux session is alive (derive state from tmux, not bead)
 		polecatName := strings.TrimPrefix(agent.ID, prefix)
-		sessionName := fmt.Sprintf("gt-%s-%s", rigName, polecatName)
+		sessionName := session.PolecatSessionName(session.PrefixForRig(rigName), polecatName)
 
 		// Session running = not orphaned (work is being processed)
 		if d.tmux.IsAgentAlive(sessionName) {
