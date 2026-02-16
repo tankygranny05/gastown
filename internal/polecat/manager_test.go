@@ -13,6 +13,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 )
 
 // installMockBd places a fake bd binary in PATH that handles the commands
@@ -1185,8 +1186,15 @@ func TestAddWithOptions_SettingsInstalledInPolecatsDir(t *testing.T) {
 }
 
 // TestOverflowNameSessionFormat verifies that overflow names don't create double-prefix.
-// Regression test for the double-prefix bug (gt-rig-rig-N instead of gt-rig-N).
+// Regression test for the double-prefix bug (tr-testrig-N instead of tr-N).
 func TestOverflowNameSessionFormat(t *testing.T) {
+	// Register prefix for testrig so PrefixFor("testrig") returns "tr"
+	reg := session.NewPrefixRegistry()
+	reg.Register("tr", "testrig")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
+
 	tmpDir := t.TempDir()
 
 	// Create minimal rig
@@ -1226,8 +1234,8 @@ func TestOverflowNameSessionFormat(t *testing.T) {
 	sessMgr := NewSessionManager(nil, r)
 	sessionName := sessMgr.SessionName(overflowName)
 
-	// Verify session name is gt-testrig-3, NOT gt-testrig-testrig-3
-	expected := "gt-testrig-3"
+	// Verify session name is tr-3, NOT tr-testrig-3
+	expected := "tr-3"
 	if sessionName != expected {
 		t.Errorf("expected session name %s, got %s (double-prefix bug!)", expected, sessionName)
 	}

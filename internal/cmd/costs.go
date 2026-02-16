@@ -1044,40 +1044,42 @@ func runCostsRecord(cmd *cobra.Command, args []string) error {
 }
 
 // deriveSessionName derives the tmux session name from GT_* environment variables.
-// Session naming patterns:
-//   - Polecats: gt-{rig}-{polecat} (e.g., gt-gastown-toast)
-//   - Crew: gt-{rig}-crew-{crew} (e.g., gt-gastown-crew-max)
-//   - Witness/Refinery: gt-{rig}-{role} (e.g., gt-gastown-witness)
-//   - Mayor/Deacon: gt-{town}-{role} (e.g., gt-ai-mayor)
+// Uses session.* helpers for canonical naming.
 func deriveSessionName() string {
 	role := os.Getenv("GT_ROLE")
 	rig := os.Getenv("GT_RIG")
 	polecat := os.Getenv("GT_POLECAT")
 	crew := os.Getenv("GT_CREW")
-	town := os.Getenv("GT_TOWN")
 
-	// Polecat: gt-{rig}-{polecat}
+	// Polecat: {prefix}-{polecat}
 	if polecat != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-%s", rig, polecat)
+		return session.PolecatSessionName(session.PrefixFor(rig), polecat)
 	}
 
-	// Crew: gt-{rig}-crew-{crew}
+	// Crew: {prefix}-crew-{crew}
 	if crew != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-crew-%s", rig, crew)
+		return session.CrewSessionName(session.PrefixFor(rig), crew)
 	}
 
-	// Town-level roles (mayor, deacon): gt-{town}-{role} or gt-{role}
+	// Town-level roles (mayor, deacon)
 	if role == "mayor" || role == "deacon" {
-		if town != "" {
-			return fmt.Sprintf("gt-%s-%s", town, role)
+		if role == "mayor" {
+			return session.MayorSessionName()
 		}
-		// No town set - use simple gt-{role} pattern
-		return fmt.Sprintf("gt-%s", role)
+		return session.DeaconSessionName()
 	}
 
-	// Rig-based roles (witness, refinery): gt-{rig}-{role}
+	// Rig-based roles (witness, refinery): {prefix}-{role}
 	if role != "" && rig != "" {
-		return fmt.Sprintf("gt-%s-%s", rig, role)
+		prefix := session.PrefixFor(rig)
+		switch role {
+		case "witness":
+			return session.WitnessSessionName(prefix)
+		case "refinery":
+			return session.RefinerySessionName(prefix)
+		default:
+			return session.PolecatSessionName(prefix, role)
+		}
 	}
 
 	return ""

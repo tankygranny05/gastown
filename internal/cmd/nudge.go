@@ -688,15 +688,15 @@ func addressToAgentBeadID(address string) string {
 
 	switch role {
 	case "witness":
-		return fmt.Sprintf("gt-%s-witness", rig)
+		return session.WitnessSessionName(session.PrefixFor(rig))
 	case "refinery":
-		return fmt.Sprintf("gt-%s-refinery", rig)
+		return session.RefinerySessionName(session.PrefixFor(rig))
 	default:
 		// Assume polecat
 		if strings.HasPrefix(role, "crew/") {
 			crewName := strings.TrimPrefix(role, "crew/")
-			return fmt.Sprintf("gt-%s-crew-%s", rig, crewName)
+			return session.CrewSessionName(session.PrefixFor(rig), crewName)
 		}
-		return fmt.Sprintf("gt-%s-polecat-%s", rig, role)
+		return session.PolecatSessionName(session.PrefixFor(rig), role)
 	}
 }

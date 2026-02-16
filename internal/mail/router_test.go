@@ -1040,7 +1040,19 @@ func TestValidateRecipient(t *testing.T) {
 	}
 }
 
+func setupTestRegistryForAddressTest(t *testing.T) {
+	t.Helper()
+	reg := session.NewPrefixRegistry()
+	reg.Register("gt", "gastown")
+	reg.Register("bd", "beads")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
+}
+
 func TestAddressToAgentBeadID(t *testing.T) {
+	setupTestRegistryForAddressTest(t)
+
 	tests := []struct {
 		name     string
 		address  string
@@ -1069,22 +1081,22 @@ func TestAddressToAgentBeadID(t *testing.T) {
 		{
 			name:     "witness",
 			address:  "gastown/witness",
-			expected: "gt-gastown-witness",
+			expected: "gt-witness",
 		},
 		{
 			name:     "refinery",
 			address:  "gastown/refinery",
-			expected: "gt-gastown-refinery",
+			expected: "gt-refinery",
 		},
 		{
 			name:     "crew member",
 			address:  "gastown/crew/max",
-			expected: "gt-gastown-crew-max",
+			expected: "gt-crew-max",
 		},
 		{
 			name:     "polecat (default)",
 			address:  "gastown/alpha",
-			expected: "gt-gastown-polecat-alpha",
+			expected: "gt-alpha",
 		},
 		{
 			name:     "empty address",

@@ -1080,7 +1080,7 @@ func discoverRigAgents(allSessions map[string]bool, r *rig.Rig, crews []string, 
 		defs = append(defs, agentDef{
 			name:    "refinery",
 			address: r.Name + "/refinery",
-			session: fmt.Sprintf("gt-%s-refinery", r.Name),
+			session: session.RefinerySessionName(session.PrefixFor(r.Name)),
 			role:    "refinery",
 			beadID:  beads.RefineryBeadIDWithPrefix(prefix, r.Name),
 		})
@@ -1091,7 +1091,7 @@ func discoverRigAgents(allSessions map[string]bool, r *rig.Rig, crews []string, 
 		defs = append(defs, agentDef{
 			name:    name,
 			address: r.Name + "/" + name,
-			session: fmt.Sprintf("gt-%s-%s", r.Name, name),
+			session: session.PolecatSessionName(session.PrefixFor(r.Name), name),
 			role:    "polecat",
 			beadID:  beads.PolecatBeadIDWithPrefix(prefix, r.Name, name),
 		})

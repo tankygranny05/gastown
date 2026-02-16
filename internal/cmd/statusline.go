@@ -560,7 +560,7 @@ func runRefineryStatusLine(t *tmux.Tmux, rigName string) error {
 
 	// Get town root from refinery pane's working directory
 	var townRoot string
-	sessionName := fmt.Sprintf("gt-%s-refinery", rigName)
+	sessionName := session.RefinerySessionName(session.PrefixFor(rigName))
 	paneDir, err := t.GetPaneWorkDir(sessionName)
 	if err == nil && paneDir != "" {
 		townRoot, _ = workspace.Find(paneDir)

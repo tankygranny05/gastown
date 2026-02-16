@@ -1396,16 +1396,18 @@ func addressToAgentBeadID(address string) string {
 	rig := parts[0]
 	target := parts[1]
 
+	rigPrefix := session.PrefixFor(rig)
+
 	switch {
 	case target == "witness":
-		return fmt.Sprintf("gt-%s-witness", rig)
+		return session.WitnessSessionName(rigPrefix)
 	case target == "refinery":
-		return fmt.Sprintf("gt-%s-refinery", rig)
+		return session.RefinerySessionName(rigPrefix)
 	case strings.HasPrefix(target, "crew/"):
 		crewName := strings.TrimPrefix(target, "crew/")
-		return fmt.Sprintf("gt-%s-crew-%s", rig, crewName)
+		return session.CrewSessionName(rigPrefix, crewName)
 	default:
-		return fmt.Sprintf("gt-%s-polecat-%s", rig, target)
+		return session.PolecatSessionName(rigPrefix, target)
 	}
 }
 

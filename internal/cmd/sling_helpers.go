@@ -16,6 +16,7 @@ import (
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/constants"
 	"github.com/steveyegge/gastown/internal/nudge"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -456,7 +457,7 @@ func wakeRigAgents(rigName string) {
 
 	// Queue nudge to witness for cooperative delivery.
 	// This avoids interrupting in-flight tool calls.
-	witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+	witnessSession := session.WitnessSessionName(session.PrefixFor(rigName))
 	townRoot, _ := workspace.FindFromCwd()
 	if townRoot != "" {
 		if err := nudge.Enqueue(townRoot, witnessSession, nudge.QueuedNudge{
@@ -476,7 +477,7 @@ func wakeRigAgents(rigName string) {
 // Uses the nudge queue for cooperative delivery so we don't interrupt
 // in-flight tool calls. The refinery picks this up at its next turn boundary.
 func nudgeRefinery(rigName, message string) {
-	refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+	refinerySession := session.RefinerySessionName(session.PrefixFor(rigName))
 
 	// Test hook: log nudge for test observability (same pattern as GT_TEST_ATTACHED_MOLECULE_LOG)
 	if logPath := os.Getenv("GT_TEST_NUDGE_LOG"); logPath != "" {

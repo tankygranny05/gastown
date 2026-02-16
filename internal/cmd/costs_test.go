@@ -3,9 +3,22 @@ package cmd
 import (
 	"os"
 	"testing"
+
+	"github.com/steveyegge/gastown/internal/session"
 )
 
+func setupCostsTestRegistry(t *testing.T) {
+	t.Helper()
+	reg := session.NewPrefixRegistry()
+	reg.Register("gt", "gastown")
+	reg.Register("bd", "beads")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
+}
+
 func TestDeriveSessionName(t *testing.T) {
+	setupCostsTestRegistry(t)
 	tests := []struct {
 		name     string
 		envVars  map[string]string
@@ -18,7 +31,7 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_RIG":     "gastown",
 				"GT_POLECAT": "toast",
 			},
-			expected: "gt-gastown-toast",
+			expected: "gt-toast",
 		},
 		{
 			name: "crew session",
@@ -27,7 +40,7 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_RIG":  "gastown",
 				"GT_CREW": "max",
 			},
-			expected: "gt-gastown-crew-max",
+			expected: "gt-crew-max",
 		},
 		{
 			name: "witness session",
@@ -35,7 +48,7 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_ROLE": "witness",
 				"GT_RIG":  "gastown",
 			},
-			expected: "gt-gastown-witness",
+			expected: "gt-witness",
 		},
 		{
 			name: "refinery session",
@@ -43,7 +56,7 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_ROLE": "refinery",
 				"GT_RIG":  "gastown",
 			},
-			expected: "gt-gastown-refinery",
+			expected: "gt-refinery",
 		},
 		{
 			name: "mayor session",
@@ -51,7 +64,7 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_ROLE": "mayor",
 				"GT_TOWN": "ai",
 			},
-			expected: "gt-ai-mayor",
+			expected: "hq-mayor",
 		},
 		{
 			name: "deacon session",
@@ -59,21 +72,21 @@ func TestDeriveSessionName(t *testing.T) {
 				"GT_ROLE": "deacon",
 				"GT_TOWN": "ai",
 			},
-			expected: "gt-ai-deacon",
+			expected: "hq-deacon",
 		},
 		{
 			name: "mayor session without GT_TOWN",
 			envVars: map[string]string{
 				"GT_ROLE": "mayor",
 			},
-			expected: "gt-mayor",
+			expected: "hq-mayor",
 		},
 		{
 			name: "deacon session without GT_TOWN",
 			envVars: map[string]string{
 				"GT_ROLE": "deacon",
 			},
-			expected: "gt-deacon",
+			expected: "hq-deacon",
 		},
 		{
 			name:     "no env vars",

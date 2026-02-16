@@ -47,7 +47,7 @@ func (m *Manager) IsRunning() (bool, error) {
 
 // SessionName returns the tmux session name for this witness.
 func (m *Manager) SessionName() string {
-	return fmt.Sprintf("gt-%s-witness", m.rig.Name)
+	return session.WitnessSessionName(session.PrefixFor(m.rig.Name))
 }
 
 // Status returns information about the witness session.

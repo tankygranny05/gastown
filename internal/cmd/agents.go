@@ -543,9 +543,9 @@ func guessSessionFromWorkerDir(workerDir, townRoot string) string {
 
 	switch workerType {
 	case "crew":
-		return fmt.Sprintf("gt-%s-crew-%s", rig, workerName)
+		return session.CrewSessionName(session.PrefixFor(rig), workerName)
 	case "polecats":
-		return fmt.Sprintf("gt-%s-%s", rig, workerName)
+		return session.PolecatSessionName(session.PrefixFor(rig), workerName)
 	}
 
 	return ""

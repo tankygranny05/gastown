@@ -9,8 +9,19 @@ import (
 	"testing"
 
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
 )
+
+func setupTestRegistryForSession(t *testing.T) {
+	t.Helper()
+	reg := session.NewPrefixRegistry()
+	reg.Register("gt", "gastown")
+	reg.Register("bd", "beads")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
+}
 
 func requireTmux(t *testing.T) {
 	t.Helper()
@@ -24,6 +35,8 @@ func requireTmux(t *testing.T) {
 }
 
 func TestSessionName(t *testing.T) {
+	setupTestRegistryForSession(t)
+
 	r := &rig.Rig{
 		Name:     "gastown",
 		Polecats: []string{"Toast"},
@@ -31,8 +44,8 @@ func TestSessionName(t *testing.T) {
 	m := NewSessionManager(tmux.NewTmux(), r)
 
 	name := m.SessionName("Toast")
-	if name != "gt-gastown-Toast" {
-		t.Errorf("sessionName = %q, want gt-gastown-Toast", name)
+	if name != "gt-Toast" {
+		t.Errorf("sessionName = %q, want gt-Toast", name)
 	}
 }
 
@@ -111,6 +124,14 @@ func TestIsRunningNoSession(t *testing.T) {
 
 func TestSessionManagerListEmpty(t *testing.T) {
 	requireTmux(t)
+
+	// Register a unique prefix so List() won't match real sessions.
+	// Without this, PrefixFor returns "gt" (default) and matches running gastown sessions.
+	reg := session.NewPrefixRegistry()
+	reg.Register("xz", "test-rig-unlikely-name")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
 
 	r := &rig.Rig{
 		Name:     "test-rig-unlikely-name",
@@ -344,6 +365,14 @@ func TestSessionManager_resolveBeadsDir(t *testing.T) {
 }
 
 func TestValidateSessionName(t *testing.T) {
+	// Register prefixes so validateSessionName can resolve them correctly.
+	reg := session.NewPrefixRegistry()
+	reg.Register("gt", "gastown")
+	reg.Register("gm", "gastown_manager")
+	old := session.DefaultRegistry()
+	session.SetDefaultRegistry(reg)
+	t.Cleanup(func() { session.SetDefaultRegistry(old) })
+
 	tests := []struct {
 		name        string
 		sessionName string
@@ -352,32 +381,32 @@ func TestValidateSessionName(t *testing.T) {
 	}{
 		{
 			name:        "valid themed name",
-			sessionName: "gt-gastown_manager-furiosa",
+			sessionName: "gm-furiosa",
 			rigName:     "gastown_manager",
 			wantErr:     false,
 		},
 		{
 			name:        "valid overflow name (new format)",
-			sessionName: "gt-gastown_manager-51",
+			sessionName: "gm-51",
 			rigName:     "gastown_manager",
 			wantErr:     false,
 		},
 		{
 			name:        "malformed double-prefix (bug)",
-			sessionName: "gt-gastown_manager-gastown_manager-51",
+			sessionName: "gm-gastown_manager-51",
 			rigName:     "gastown_manager",
 			wantErr:     true,
 		},
 		{
 			name:        "malformed double-prefix gastown",
-			sessionName: "gt-gastown-gastown-142",
+			sessionName: "gt-gastown-142",
 			rigName:     "gastown",
 			wantErr:     true,
 		},
 		{
 			name:        "different rig (can't validate)",
 			sessionName: "gt-other-rig-name",
-			rigName:     "gastown",
+			rigName:     "gastown_manager",
 			wantErr:     false,
 		},
 	}

@@ -550,7 +550,7 @@ func (m *Manager) setupSharedBeads(crewPath string) error {
 
 // SessionName returns the tmux session name for a crew member.
 func (m *Manager) SessionName(name string) string {
-	return fmt.Sprintf("gt-%s-crew-%s", m.rig.Name, name)
+	return session.CrewSessionName(session.PrefixFor(m.rig.Name), name)
 }
 
 // Start creates and starts a tmux session for a crew member.
