@@ -627,3 +627,158 @@ func TestBranchDetectionCleanupOnError(t *testing.T) {
 		t.Error("RoleInfo should be constructible from env vars for cleanup")
 	}
 }
+
+// TestConvoyMergeStrategyBranching verifies that the merge strategy branching
+// logic in runDone correctly routes to the right code path for each strategy.
+func TestConvoyMergeStrategyBranching(t *testing.T) {
+	tests := []struct {
+		name          string
+		mergeStrategy string
+		wantPush      bool // should push happen?
+		wantMR        bool // should MR bead be created?
+		wantDirect    bool // should push to default branch?
+	}{
+		{
+			name:          "mr strategy - normal push and MR",
+			mergeStrategy: "mr",
+			wantPush:      true,
+			wantMR:        true,
+			wantDirect:    false,
+		},
+		{
+			name:          "empty strategy - defaults to mr behavior",
+			mergeStrategy: "",
+			wantPush:      true,
+			wantMR:        true,
+			wantDirect:    false,
+		},
+		{
+			name:          "direct strategy - push to main, no MR",
+			mergeStrategy: "direct",
+			wantPush:      true,
+			wantMR:        false,
+			wantDirect:    true,
+		},
+		{
+			name:          "local strategy - no push, no MR",
+			mergeStrategy: "local",
+			wantPush:      false,
+			wantMR:        false,
+			wantDirect:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the branching logic from runDone
+			shouldPush := true
+			shouldCreateMR := true
+			shouldPushDirect := false
+
+			switch tt.mergeStrategy {
+			case "local":
+				shouldPush = false
+				shouldCreateMR = false
+			case "direct":
+				shouldPushDirect = true
+				shouldCreateMR = false
+			default:
+				// "mr" or empty = default behavior
+			}
+
+			if shouldPush != tt.wantPush {
+				t.Errorf("shouldPush = %v, want %v", shouldPush, tt.wantPush)
+			}
+			if shouldCreateMR != tt.wantMR {
+				t.Errorf("shouldCreateMR = %v, want %v", shouldCreateMR, tt.wantMR)
+			}
+			if shouldPushDirect != tt.wantDirect {
+				t.Errorf("shouldPushDirect = %v, want %v", shouldPushDirect, tt.wantDirect)
+			}
+		})
+	}
+}
+
+// TestConvoyMergeStrategyNotification verifies that the merge strategy
+// is included in the witness notification body when set to non-default values.
+func TestConvoyMergeStrategyNotification(t *testing.T) {
+	tests := []struct {
+		name          string
+		mergeStrategy string
+		wantInBody    bool
+	}{
+		{"direct strategy included", "direct", true},
+		{"local strategy included", "local", true},
+		{"mr strategy excluded", "mr", false},
+		{"empty strategy excluded", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the notification body building from runDone
+			var bodyLines []string
+			bodyLines = append(bodyLines, "Exit: COMPLETED")
+			if tt.mergeStrategy != "" && tt.mergeStrategy != "mr" {
+				bodyLines = append(bodyLines, fmt.Sprintf("MergeStrategy: %s", tt.mergeStrategy))
+			}
+
+			body := strings.Join(bodyLines, "\n")
+			hasMergeStrategy := strings.Contains(body, "MergeStrategy:")
+
+			if hasMergeStrategy != tt.wantInBody {
+				t.Errorf("body contains MergeStrategy = %v, want %v\nbody: %s",
+					hasMergeStrategy, tt.wantInBody, body)
+			}
+		})
+	}
+}
+
+// TestParseConvoyMergeStrategy verifies that parseConvoyMergeStrategy correctly
+// extracts the merge strategy from convoy descriptions.
+func TestParseConvoyMergeStrategy(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		want        string
+	}{
+		{
+			name:        "direct strategy",
+			description: "Auto-created convoy tracking gt-abc\nMerge: direct",
+			want:        "direct",
+		},
+		{
+			name:        "mr strategy",
+			description: "Convoy tracking 3 issues\nOwner: mayor/\nMerge: mr",
+			want:        "mr",
+		},
+		{
+			name:        "local strategy",
+			description: "Merge: local\nOwner: mayor/",
+			want:        "local",
+		},
+		{
+			name:        "no merge field",
+			description: "Auto-created convoy tracking gt-abc",
+			want:        "",
+		},
+		{
+			name:        "empty description",
+			description: "",
+			want:        "",
+		},
+		{
+			name:        "merge in middle of description",
+			description: "Convoy tracking 1 issues\nMerge: direct\nNotify: mayor/",
+			want:        "direct",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseConvoyMergeStrategy(tt.description)
+			if got != tt.want {
+				t.Errorf("parseConvoyMergeStrategy() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

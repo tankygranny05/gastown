@@ -136,6 +136,42 @@ func convoyTracksBead(beadsDir, convoyID, beadID string) bool {
 	return false
 }
 
+// getConvoyMergeStrategyForIssue finds the convoy tracking the given issue
+// and returns its merge strategy ("direct", "mr", "local", or "" for default/mr).
+// Returns "" on any error (convoy not found, lookup fails, no strategy set).
+func getConvoyMergeStrategyForIssue(issueID string) string {
+	if issueID == "" {
+		return ""
+	}
+	convoyID := isTrackedByConvoy(issueID)
+	if convoyID == "" {
+		return ""
+	}
+
+	townRoot, err := workspace.FindFromCwd()
+	if err != nil {
+		return ""
+	}
+	townBeads := filepath.Join(townRoot, ".beads")
+
+	showCmd := exec.Command("bd", "show", convoyID, "--json")
+	showCmd.Dir = townBeads
+
+	out, err := showCmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	var convoys []struct {
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(out, &convoys); err != nil || len(convoys) == 0 {
+		return ""
+	}
+
+	return parseConvoyMergeStrategy(convoys[0].Description)
+}
+
 // createAutoConvoy creates an auto-convoy for a single issue and tracks it.
 // If owned is true, the convoy is marked with the gt:owned label for caller-managed lifecycle.
 // mergeStrategy is optional: "direct", "mr", or "local" (empty = default mr).
