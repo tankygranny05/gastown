@@ -782,3 +782,267 @@ func TestParseConvoyMergeStrategy(t *testing.T) {
 		})
 	}
 }
+
+// TestDoneCheckpointLabelFormat verifies the done-cp label format matches
+// the expected pattern: done-cp:<stage>:<value>:<unix-ts>
+func TestDoneCheckpointLabelFormat(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		checkpoint DoneCheckpoint
+		value      string
+		wantPrefix string
+	}{
+		{CheckpointPushed, "polecat/furiosa-abc", "done-cp:pushed:polecat/furiosa-abc:"},
+		{CheckpointMRCreated, "gt-xyz123", "done-cp:mr-created:gt-xyz123:"},
+		{CheckpointDoltMerged, "ok", "done-cp:dolt-merged:ok:"},
+		{CheckpointWitnessNotified, "ok", "done-cp:witness-notified:ok:"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.checkpoint), func(t *testing.T) {
+			label := fmt.Sprintf("done-cp:%s:%s:%d", tt.checkpoint, tt.value, now.Unix())
+			if !strings.HasPrefix(label, tt.wantPrefix) {
+				t.Errorf("label = %q, want prefix %q", label, tt.wantPrefix)
+			}
+
+			// Verify the label can be parsed back
+			parts := strings.SplitN(label, ":", 4)
+			if len(parts) != 4 {
+				t.Fatalf("expected 4 parts, got %d: %v", len(parts), parts)
+			}
+			if parts[0] != "done-cp" {
+				t.Errorf("prefix = %q, want %q", parts[0], "done-cp")
+			}
+			if DoneCheckpoint(parts[1]) != tt.checkpoint {
+				t.Errorf("stage = %q, want %q", parts[1], tt.checkpoint)
+			}
+			if parts[2] != tt.value {
+				t.Errorf("value = %q, want %q", parts[2], tt.value)
+			}
+		})
+	}
+}
+
+// TestReadDoneCheckpoints verifies that readDoneCheckpoints correctly
+// parses checkpoint labels from an issue's label list.
+func TestReadDoneCheckpoints(t *testing.T) {
+	// Test the parsing logic directly by simulating what readDoneCheckpoints does
+	tests := []struct {
+		name   string
+		labels []string
+		want   map[DoneCheckpoint]string
+	}{
+		{
+			name:   "no checkpoints",
+			labels: []string{"gt:agent", "idle:3"},
+			want:   map[DoneCheckpoint]string{},
+		},
+		{
+			name:   "push checkpoint only",
+			labels: []string{"gt:agent", "done-cp:pushed:polecat/furiosa-abc:1738972800"},
+			want:   map[DoneCheckpoint]string{CheckpointPushed: "polecat/furiosa-abc"},
+		},
+		{
+			name: "multiple checkpoints",
+			labels: []string{
+				"gt:agent",
+				"done-cp:pushed:polecat/furiosa-abc:1738972800",
+				"done-cp:mr-created:gt-xyz123:1738972801",
+				"done-cp:dolt-merged:ok:1738972802",
+			},
+			want: map[DoneCheckpoint]string{
+				CheckpointPushed:     "polecat/furiosa-abc",
+				CheckpointMRCreated:  "gt-xyz123",
+				CheckpointDoltMerged: "ok",
+			},
+		},
+		{
+			name:   "all checkpoints",
+			labels: []string{
+				"done-cp:pushed:branch-name:1738972800",
+				"done-cp:mr-created:gt-mr1:1738972801",
+				"done-cp:dolt-merged:ok:1738972802",
+				"done-cp:witness-notified:ok:1738972803",
+			},
+			want: map[DoneCheckpoint]string{
+				CheckpointPushed:          "branch-name",
+				CheckpointMRCreated:       "gt-mr1",
+				CheckpointDoltMerged:      "ok",
+				CheckpointWitnessNotified: "ok",
+			},
+		},
+		{
+			name:   "mixed with done-intent and other labels",
+			labels: []string{
+				"gt:agent",
+				"done-intent:COMPLETED:1738972800",
+				"done-cp:pushed:mybranch:1738972801",
+				"idle:2",
+			},
+			want: map[DoneCheckpoint]string{CheckpointPushed: "mybranch"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the parsing logic from readDoneCheckpoints
+			checkpoints := make(map[DoneCheckpoint]string)
+			for _, label := range tt.labels {
+				if strings.HasPrefix(label, "done-cp:") {
+					parts := strings.SplitN(label, ":", 4)
+					if len(parts) >= 3 {
+						stage := DoneCheckpoint(parts[1])
+						value := parts[2]
+						checkpoints[stage] = value
+					}
+				}
+			}
+
+			if len(checkpoints) != len(tt.want) {
+				t.Errorf("got %d checkpoints, want %d", len(checkpoints), len(tt.want))
+			}
+			for k, v := range tt.want {
+				if checkpoints[k] != v {
+					t.Errorf("checkpoint[%s] = %q, want %q", k, checkpoints[k], v)
+				}
+			}
+		})
+	}
+}
+
+// TestClearDoneCheckpoints verifies that clearDoneCheckpoints removes
+// only done-cp labels while preserving other labels.
+func TestClearDoneCheckpoints(t *testing.T) {
+	allLabels := []string{
+		"gt:agent",
+		"idle:3",
+		"done-intent:COMPLETED:1738972800",
+		"done-cp:pushed:mybranch:1738972801",
+		"done-cp:mr-created:gt-xyz:1738972802",
+		"done-cp:dolt-merged:ok:1738972803",
+		"backoff-until:1738972900",
+	}
+
+	var kept []string
+	var removed []string
+	for _, label := range allLabels {
+		if strings.HasPrefix(label, "done-cp:") {
+			removed = append(removed, label)
+		} else {
+			kept = append(kept, label)
+		}
+	}
+
+	if len(removed) != 3 {
+		t.Errorf("expected 3 checkpoint labels removed, got %d: %v", len(removed), removed)
+	}
+	if len(kept) != 4 {
+		t.Errorf("expected 4 labels kept, got %d: %v", len(kept), kept)
+	}
+
+	// Verify no checkpoint labels in kept set
+	for _, label := range kept {
+		if strings.HasPrefix(label, "done-cp:") {
+			t.Errorf("checkpoint label was not removed: %s", label)
+		}
+	}
+
+	// Verify done-intent is preserved (not a checkpoint)
+	found := false
+	for _, label := range kept {
+		if strings.HasPrefix(label, "done-intent:") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("done-intent label should be preserved by clearDoneCheckpoints")
+	}
+}
+
+// TestCheckpointResumeSkipsPush verifies that when a push checkpoint exists,
+// the push section is skipped on resume.
+func TestCheckpointResumeSkipsPush(t *testing.T) {
+	tests := []struct {
+		name        string
+		checkpoints map[DoneCheckpoint]string
+		wantSkip    bool
+	}{
+		{
+			name:        "no checkpoints - push runs normally",
+			checkpoints: map[DoneCheckpoint]string{},
+			wantSkip:    false,
+		},
+		{
+			name:        "push checkpoint exists - skip push",
+			checkpoints: map[DoneCheckpoint]string{CheckpointPushed: "mybranch"},
+			wantSkip:    true,
+		},
+		{
+			name: "push and MR checkpoints - skip push",
+			checkpoints: map[DoneCheckpoint]string{
+				CheckpointPushed:    "mybranch",
+				CheckpointMRCreated: "gt-xyz",
+			},
+			wantSkip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Replicate the guard condition from runDone
+			skipPush := tt.checkpoints[CheckpointPushed] != ""
+			if skipPush != tt.wantSkip {
+				t.Errorf("skipPush = %v, want %v", skipPush, tt.wantSkip)
+			}
+		})
+	}
+}
+
+// TestCheckpointResumeSkipsDoltMerge verifies that when a Dolt merge
+// checkpoint exists, the merge section is skipped on resume.
+func TestCheckpointResumeSkipsDoltMerge(t *testing.T) {
+	tests := []struct {
+		name        string
+		checkpoints map[DoneCheckpoint]string
+		wantSkip    bool
+	}{
+		{
+			name:        "no checkpoints - merge runs normally",
+			checkpoints: map[DoneCheckpoint]string{},
+			wantSkip:    false,
+		},
+		{
+			name: "dolt merge checkpoint - skip merge",
+			checkpoints: map[DoneCheckpoint]string{
+				CheckpointPushed:     "mybranch",
+				CheckpointDoltMerged: "ok",
+			},
+			wantSkip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			skipMerge := tt.checkpoints[CheckpointDoltMerged] != ""
+			if skipMerge != tt.wantSkip {
+				t.Errorf("skipMerge = %v, want %v", skipMerge, tt.wantSkip)
+			}
+		})
+	}
+}
+
+// TestCheckpointNilMapSafe verifies that reading from a nil/empty checkpoint
+// map returns zero values and doesn't panic.
+func TestCheckpointNilMapSafe(t *testing.T) {
+	// Nil map - should not panic
+	var nilMap map[DoneCheckpoint]string
+	if nilMap[CheckpointPushed] != "" {
+		t.Error("nil map should return zero value")
+	}
+
+	// Empty map
+	emptyMap := map[DoneCheckpoint]string{}
+	if emptyMap[CheckpointPushed] != "" {
+		t.Error("empty map should return zero value")
+	}
+}

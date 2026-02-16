@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -64,6 +66,7 @@ var (
 	donePhaseComplete bool
 	doneGate          string
 	doneCleanupStatus string
+	doneResume        bool
 )
 
 // Valid exit types for gt done
@@ -81,6 +84,7 @@ func init() {
 	doneCmd.Flags().BoolVar(&donePhaseComplete, "phase-complete", false, "Signal phase complete - await gate before continuing")
 	doneCmd.Flags().StringVar(&doneGate, "gate", "", "Gate bead ID to wait on (with --phase-complete)")
 	doneCmd.Flags().StringVar(&doneCleanupStatus, "cleanup-status", "", "Git cleanup status: clean, uncommitted, unpushed, stash, unknown (ZFC: agent-observed)")
+	doneCmd.Flags().BoolVar(&doneResume, "resume", false, "Resume from last checkpoint (auto-detected, for Witness recovery)")
 
 	rootCmd.AddCommand(doneCmd)
 }
@@ -137,6 +141,25 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 			retErr = NewSilentExit(0)
 		}
 	}()
+
+	// SIGTERM handler: Claude Code may kill this process via SIGTERM when context
+	// is exhausted. Without a handler, the deferred cleanup above doesn't run
+	// because the process is killed before defer can execute. This handler gives
+	// us a chance to run session cleanup even on external termination.
+	// Checkpoints (below) handle the harder case of SIGKILL where no handler runs.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Fprintf(os.Stderr, "\n%s Received SIGTERM — running deferred cleanup\n", style.Bold.Render("→"))
+		if sessionCleanupNeeded && !sessionKilled {
+			if err := selfKillSession(deferredTownRoot, deferredRoleInfo); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: SIGTERM cleanup failed: %v\n", err)
+			}
+		}
+		os.Exit(1)
+	}()
+	defer signal.Stop(sigCh)
 
 	// Find workspace with fallback for deleted worktrees (hq-3xaxy)
 	// If the polecat's worktree was deleted by Witness before gt done finishes,
@@ -332,9 +355,19 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 	// Write done-intent label EARLY, before push/MR operations.
 	// If gt done crashes after this point, the Witness can detect the intent
 	// and auto-nuke the zombie polecat.
+	//
+	// Also read existing checkpoints for resume capability (gt-aufru).
+	// If gt done was interrupted (SIGTERM, context exhaustion, SIGKILL),
+	// checkpoints indicate which stages completed. On re-invocation, we
+	// skip those stages to avoid repeating work or hitting errors.
+	checkpoints := map[DoneCheckpoint]string{}
 	if agentBeadID != "" {
 		bd := beads.New(beads.ResolveBeadsDir(cwd))
 		setDoneIntentLabel(bd, agentBeadID, exitType)
+		checkpoints = readDoneCheckpoints(bd, agentBeadID)
+		if len(checkpoints) > 0 {
+			fmt.Printf("%s Resuming gt done from checkpoint (previous run was interrupted)\n", style.Bold.Render("→"))
+		}
 	}
 
 	// Get configured default branch for this rig
@@ -498,6 +531,16 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 
 		// Default: "mr" strategy (or no convoy) — push branch, create MR bead
 
+		// Pre-declare push variables for checkpoint goto (gt-aufru)
+		var refspec string
+		var pushErr error
+
+		// Resume: skip push if already completed in a previous run (gt-aufru)
+		if checkpoints[CheckpointPushed] != "" {
+			fmt.Printf("%s Branch already pushed (resumed from checkpoint)\n", style.Bold.Render("✓"))
+			goto afterPush
+		}
+
 		// CRITICAL: Push branch BEFORE creating MR bead (hq-6dk53, hq-a4ksk)
 		// The MR bead triggers Refinery to process this branch. If the branch
 		// isn't pushed yet, Refinery finds nothing to merge. The worktree gets
@@ -508,8 +551,8 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 		// track origin/main, so a bare push sends commits to main directly,
 		// bypassing the MR/refinery flow (G20 root cause).
 		fmt.Printf("Pushing branch to remote...\n")
-		refspec := branch + ":" + branch
-		pushErr := g.Push("origin", refspec, false)
+		refspec = branch + ":" + branch
+		pushErr = g.Push("origin", refspec, false)
 		if pushErr != nil {
 			// Primary push failed — try fallback from the bare repo (GH #1348).
 			// When polecat sessions are reused or worktrees are stale, the worktree's
@@ -573,6 +616,14 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 			}
 		}
 		fmt.Printf("%s Branch pushed to origin\n", style.Bold.Render("✓"))
+
+		// Write push checkpoint for resume (gt-aufru)
+		if agentBeadID != "" {
+			cpBd := beads.New(beads.ResolveBeadsDir(cwd))
+			writeDoneCheckpoint(cpBd, agentBeadID, CheckpointPushed, branch)
+		}
+
+	afterPush:
 
 		if issueID == "" {
 			return fmt.Errorf("cannot determine source issue from branch '%s'; use --issue to specify", branch)
@@ -705,6 +756,13 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 			// merge — refinery wakes up and queries main before the polecat's
 			// Dolt branch (containing the MR bead) is merged.
 		}
+
+		// Write MR checkpoint for resume (gt-aufru)
+		if mrID != "" && agentBeadID != "" {
+			cpBd := beads.New(beads.ResolveBeadsDir(cwd))
+			writeDoneCheckpoint(cpBd, agentBeadID, CheckpointMRCreated, mrID)
+		}
+
 		fmt.Printf("  Source: %s\n", branch)
 		fmt.Printf("  Target: %s\n", target)
 		fmt.Printf("  Issue: %s\n", issueID)
@@ -745,7 +803,14 @@ notifyWitness:
 	// Branch-per-polecat: merge polecat's Dolt branch to main.
 	// This makes all beads changes (MR bead, issue updates) visible on main
 	// before the refinery or witness try to read them.
-	mergeFailed := false
+	var mergeFailed bool
+
+	// Resume: skip Dolt merge if already completed (gt-aufru checkpoint)
+	if checkpoints[CheckpointDoltMerged] != "" {
+		fmt.Printf("%s Dolt branch already merged (resumed from checkpoint)\n", style.Bold.Render("✓"))
+		goto afterDoltMerge
+	}
+
 	if bdBranch := os.Getenv("BD_BRANCH"); bdBranch != "" {
 		fmt.Printf("Merging Dolt branch %s to main...\n", bdBranch)
 		if err := doltserver.MergePolecatBranch(townRoot, rigName, bdBranch); err != nil {
@@ -759,6 +824,13 @@ notifyWitness:
 		os.Unsetenv("BD_BRANCH")
 	}
 
+	// Write Dolt merge checkpoint for resume (gt-aufru)
+	if agentBeadID != "" {
+		cpBd := beads.New(beads.ResolveBeadsDir(cwd))
+		writeDoneCheckpoint(cpBd, agentBeadID, CheckpointDoltMerged, "ok")
+	}
+
+afterDoltMerge:
 	// Nudge refinery AFTER the Dolt merge so MR bead is visible on main.
 	// Skip nudge only if merge was attempted and failed — MR bead is stranded
 	// on the polecat branch and refinery won't find it on main.
@@ -821,6 +893,12 @@ notifyWitness:
 		} else {
 			fmt.Printf("%s Witness notified of WORK_DONE for %s\n", style.Bold.Render("✓"), issueID)
 		}
+	}
+
+	// Write witness notification checkpoint for resume (gt-aufru)
+	if agentBeadID != "" {
+		cpBd := beads.New(beads.ResolveBeadsDir(cwd))
+		writeDoneCheckpoint(cpBd, agentBeadID, CheckpointWitnessNotified, "ok")
 	}
 
 	// Log done event (townlog and activity feed)
@@ -923,6 +1001,84 @@ func clearDoneIntentLabel(bd *beads.Beads, agentBeadID string) {
 		RemoveLabels: toRemove,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: couldn't clear done-intent label on %s: %v\n", agentBeadID, err)
+	}
+}
+
+// DoneCheckpoint represents a checkpoint stage in the gt done flow (gt-aufru).
+// Checkpoints are stored as labels on the agent bead, enabling resume after
+// process interruption (context exhaustion, SIGTERM, etc.).
+type DoneCheckpoint string
+
+const (
+	CheckpointPushed          DoneCheckpoint = "pushed"
+	CheckpointMRCreated       DoneCheckpoint = "mr-created"
+	CheckpointDoltMerged      DoneCheckpoint = "dolt-merged"
+	CheckpointWitnessNotified DoneCheckpoint = "witness-notified"
+)
+
+// writeDoneCheckpoint writes a checkpoint label on the agent bead.
+// Format: done-cp:<stage>:<value>:<unix-ts>
+// Non-fatal: if this fails, gt done continues without the checkpoint.
+func writeDoneCheckpoint(bd *beads.Beads, agentBeadID string, cp DoneCheckpoint, value string) {
+	if agentBeadID == "" {
+		return
+	}
+	label := fmt.Sprintf("done-cp:%s:%s:%d", cp, value, time.Now().Unix())
+	if err := bd.Update(agentBeadID, beads.UpdateOptions{
+		AddLabels: []string{label},
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: couldn't write checkpoint %s on %s: %v\n", cp, agentBeadID, err)
+	}
+}
+
+// readDoneCheckpoints reads all done-cp:* labels from the agent bead.
+// Returns a map of checkpoint stage -> value. Empty map if none found.
+func readDoneCheckpoints(bd *beads.Beads, agentBeadID string) map[DoneCheckpoint]string {
+	checkpoints := make(map[DoneCheckpoint]string)
+	if agentBeadID == "" {
+		return checkpoints
+	}
+	issue, err := bd.Show(agentBeadID)
+	if err != nil {
+		return checkpoints
+	}
+	for _, label := range issue.Labels {
+		if strings.HasPrefix(label, "done-cp:") {
+			// Format: done-cp:<stage>:<value>:<ts>
+			parts := strings.SplitN(label, ":", 4)
+			if len(parts) >= 3 {
+				stage := DoneCheckpoint(parts[1])
+				value := parts[2]
+				checkpoints[stage] = value
+			}
+		}
+	}
+	return checkpoints
+}
+
+// clearDoneCheckpoints removes all done-cp:* labels from the agent bead.
+// Called on clean exit to prevent stale checkpoints from interfering with future runs.
+func clearDoneCheckpoints(bd *beads.Beads, agentBeadID string) {
+	if agentBeadID == "" {
+		return
+	}
+	issue, err := bd.Show(agentBeadID)
+	if err != nil {
+		return
+	}
+	var toRemove []string
+	for _, label := range issue.Labels {
+		if strings.HasPrefix(label, "done-cp:") {
+			toRemove = append(toRemove, label)
+		}
+	}
+	if len(toRemove) == 0 {
+		return
+	}
+	if err := bd.Update(agentBeadID, beads.UpdateOptions{
+		RemoveLabels: toRemove,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: couldn't clear done checkpoints on %s: %v\n", agentBeadID, err)
 	}
 }
 
@@ -1089,10 +1245,11 @@ func updateAgentStateOnDone(cwd, townRoot, exitType, _ string) { // issueID unus
 		}
 	}
 
-	// Clear done-intent label on clean exit — gt done completed successfully.
-	// If we don't reach here (crash/stuck), the Witness uses the lingering label
-	// to detect the zombie.
+	// Clear done-intent label and checkpoints on clean exit — gt done completed
+	// successfully. If we don't reach here (crash/stuck), the Witness uses the
+	// lingering labels to detect the zombie and resume from checkpoints.
 	clearDoneIntentLabel(bd, agentBeadID)
+	clearDoneCheckpoints(bd, agentBeadID)
 }
 
 // getIssueFromAgentHook retrieves the issue ID from an agent's hook_bead field.
