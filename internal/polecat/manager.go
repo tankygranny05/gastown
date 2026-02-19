@@ -631,12 +631,33 @@ func (m *Manager) AddWithOptions(name string, opts AddOptions) (*Polecat, error)
 	// name as in-use without needing the .pending file.
 	_ = os.Remove(m.pendingPath(name))
 
-	// cleanupOnError removes polecatDir if worktree creation fails.
-	// This ensures exists() returns false for incomplete polecats, preventing
-	// a partial state where polecatDir exists but the worktree doesn't.
-	// See: br-w2ee9 (worktrees not being created)
+	// Track resources created for rollback on error.
+	// AddWithOptions creates several resources in sequence (directory, worktree,
+	// agent bead); on failure, all created resources must be cleaned up to prevent
+	// leaking names, orphaning beads, or leaving stale worktree registrations.
+	// See: gt-2vs22
+	var worktreeCreated bool
 	cleanupOnError := func() {
+		// Best-effort reset of agent bead (may have been partially created
+		// by a failed createAgentBeadWithRetry)
+		aid := m.agentBeadID(name)
+		_ = m.beads.ResetAgentBeadForReuse(aid, "spawn rollback")
+
+		// Remove git worktree registration if worktree was successfully added.
+		// Must happen before directory removal so git can clean up properly.
+		if worktreeCreated {
+			if rg, repoErr := m.repoBase(); repoErr == nil {
+				_ = rg.WorktreeRemove(clonePath, true)
+			}
+		}
+
+		// Remove polecat directory
 		_ = os.RemoveAll(polecatDir)
+
+		// Release name back to pool so it can be reallocated immediately
+		// rather than waiting for the next reconcile cycle.
+		m.namePool.Release(name)
+		_ = m.namePool.Save()
 	}
 
 	// Get the repo base (bare repo or mayor/rig)
@@ -686,6 +707,7 @@ func (m *Manager) AddWithOptions(name string, opts AddOptions) (*Polecat, error)
 		cleanupOnError()
 		return nil, fmt.Errorf("creating worktree from %s: %w", startPoint, err)
 	}
+	worktreeCreated = true
 
 	// NOTE: No per-directory CLAUDE.md or AGENTS.md is created here.
 	// Only ~/gt/CLAUDE.md (town-root identity anchor) exists on disk.
