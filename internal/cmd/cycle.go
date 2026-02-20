@@ -14,13 +14,21 @@ import (
 // correct, so we pass the session name explicitly via #{session_name} expansion.
 var cycleSession string
 
+// cycleClient is the --client flag for cycle next/prev commands.
+// When run from tmux run-shell, the spawned process has no client context,
+// so switch-client without -c may target the wrong client. Pass the client
+// TTY via #{client_tty} expansion to ensure the correct client is switched.
+var cycleClient string
+
 func init() {
 	rootCmd.AddCommand(cycleCmd)
 	cycleCmd.AddCommand(cycleNextCmd)
 	cycleCmd.AddCommand(cyclePrevCmd)
 
 	cycleNextCmd.Flags().StringVar(&cycleSession, "session", "", "Override current session (used by tmux binding)")
+	cycleNextCmd.Flags().StringVar(&cycleClient, "client", "", "Target client TTY (used by tmux binding, e.g. #{client_tty})")
 	cyclePrevCmd.Flags().StringVar(&cycleSession, "session", "", "Override current session (used by tmux binding)")
+	cyclePrevCmd.Flags().StringVar(&cycleClient, "client", "", "Target client TTY (used by tmux binding, e.g. #{client_tty})")
 }
 
 var cycleCmd = &cobra.Command{
@@ -54,7 +62,7 @@ Examples:
   gt cycle next
   gt cycle next --session gt-gastown-witness  # Explicit session context`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cycleToSession(1, cycleSession)
+		return cycleToSession(1, cycleSession, cycleClient)
 	},
 }
 
@@ -71,14 +79,15 @@ Examples:
   gt cycle prev
   gt cycle prev --session gt-gastown-witness  # Explicit session context`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cycleToSession(-1, cycleSession)
+		return cycleToSession(-1, cycleSession, cycleClient)
 	},
 }
 
 // cycleToSession dispatches to the appropriate cycling function based on session type.
 // direction: 1 for next, -1 for previous
 // sessionOverride: if non-empty, use this instead of detecting current session
-func cycleToSession(direction int, sessionOverride string) error {
+// clientOverride: if non-empty, pass as -c flag to tmux switch-client
+func cycleToSession(direction int, sessionOverride, clientOverride string) error {
 	session := sessionOverride
 	if session == "" {
 		var err error
@@ -87,6 +96,9 @@ func cycleToSession(direction int, sessionOverride string) error {
 			return nil // Not in tmux, nothing to do
 		}
 	}
+
+	// Store client for use by cycleRigInfraSession
+	cycleClientTarget = clientOverride
 
 	// Check if it's a town-level session
 	townLevelSessions := getTownLevelSessions()
@@ -131,6 +143,11 @@ func parseRigInfraSession(sess string) string {
 	return ""
 }
 
+// cycleClientTarget holds the client TTY to pass to switch-client -c.
+// Set by cycleToSession from the --client flag. When empty, switch-client
+// runs without -c (legacy behavior for backward compatibility).
+var cycleClientTarget string
+
 // resolveCurrentSession returns the current tmux session, using override if provided.
 func resolveCurrentSession(override string) (string, error) {
 	if override != "" {
@@ -168,7 +185,12 @@ func cycleInGroup(direction int, currentSession string, sessions []string) error
 		return nil // Only one session
 	}
 
-	cmd := exec.Command("tmux", "-u", "switch-client", "-t", sessions[targetIdx])
+	args := []string{"-u", "switch-client"}
+	if cycleClientTarget != "" {
+		args = append(args, "-c", cycleClientTarget)
+	}
+	args = append(args, "-t", sessions[targetIdx])
+	cmd := exec.Command("tmux", args...)
 	return cmd.Run()
 }
 
