@@ -121,6 +121,13 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 			if err := selfKillSession(deferredTownRoot, deferredRoleInfo); err != nil {
 				style.PrintWarning("deferred session kill failed: %v", err)
 			}
+			// Only suppress errors with SilentExit(0) if the function completed
+			// normally (retErr is nil or already a SilentExit). If retErr is a real
+			// error (e.g., MR creation failed, missing issue ID), log it before
+			// exiting so it's visible in the agent's output (gt-cof fix).
+			if _, silent := IsSilentExit(retErr); retErr != nil && !silent {
+				fmt.Fprintf(os.Stderr, "Error during gt done (session cleaned up): %v\n", retErr)
+			}
 			if retErr == nil {
 				retErr = NewSilentExit(0)
 			}
@@ -764,32 +771,47 @@ func runDone(cmd *cobra.Command, args []string) (retErr error) {
 			description += "\nconflict_task_id: null"
 
 			// Create MR bead (ephemeral wisp - will be cleaned up after merge)
-			mrIssue, err := bd.Create(beads.CreateOptions{
-				Title:       title,
-				Type:        "merge-request",
-				Priority:    priority,
-				Description: description,
-				Ephemeral:   true,
-			})
-			if err != nil {
-				// HARD FAILURE (gt-t79): MR bead creation failed with status=COMPLETED.
+			// Retry with backoff: transient Dolt lock contention or connection
+			// failures can cause a single attempt to fail. Without retry, MR
+			// creation silently fails, stranding the pushed branch (gt-cof).
+			var mrIssue *beads.Issue
+			var mrCreateErr error
+			for mrAttempt := 1; mrAttempt <= 3; mrAttempt++ {
+				mrIssue, mrCreateErr = bd.Create(beads.CreateOptions{
+					Title:       title,
+					Type:        "merge-request",
+					Priority:    priority,
+					Description: description,
+					Ephemeral:   true,
+				})
+				if mrCreateErr == nil {
+					break
+				}
+				if mrAttempt < 3 {
+					style.PrintWarning("MR bead creation attempt %d/3 failed: %v (retrying in %ds)", mrAttempt, mrCreateErr, mrAttempt*2)
+					time.Sleep(time.Duration(mrAttempt*2) * time.Second)
+				}
+			}
+			if mrCreateErr != nil {
+				// HARD FAILURE (gt-t79 + gt-cof): MR bead creation failed after retries.
 				// Branch is pushed but MR bead not created — if we self-kill now,
 				// the work is orphaned (no MR bead means Refinery never processes it).
 				// Set mrCreationFailed to prevent both deferred and explicit self-kill.
 				mrCreationFailed = true
-				errMsg := fmt.Sprintf("MR bead creation failed: %v", err)
+				pushFailed = true // Prevent worktree nuke — branch is pushed but MR is missing
+				errMsg := fmt.Sprintf("MR bead creation failed after 3 attempts: %v", mrCreateErr)
 				doneErrors = append(doneErrors, errMsg)
 				style.PrintWarning("%s\nBranch is pushed but MR bead not created. Session preserved for retry.", errMsg)
 
 				// Write MR failure checkpoint so gt done --resume can retry (gt-t79)
 				if agentBeadID != "" {
 					cpBd := beads.New(beads.ResolveBeadsDir(cwd))
-					writeDoneCheckpoint(cpBd, agentBeadID, CheckpointMRFailed, err.Error())
+					writeDoneCheckpoint(cpBd, agentBeadID, CheckpointMRFailed, mrCreateErr.Error())
 				}
 
 				// Emit done_mr_failed event for observability (gt-t79)
 				if logErr := events.LogFeed(events.TypeDoneMRFailed, sender,
-					events.DoneMRFailedPayload(issueID, branch, err.Error())); logErr != nil {
+					events.DoneMRFailedPayload(issueID, branch, mrCreateErr.Error())); logErr != nil {
 					style.PrintWarning("could not log done_mr_failed event: %v", logErr)
 				}
 
@@ -971,11 +993,13 @@ afterDoltMerge:
 		}
 		selfCleanAttempted = true
 
-		// Step 1: Nuke the worktree (only for COMPLETED with successful push)
+		// Step 1: Nuke the worktree (only for COMPLETED with successful push+merge)
 		// If push failed, preserve the worktree so Witness/Refinery can still
 		// access the branch for recovery. selfNukePolecat also checks
 		// branch-on-remote, so this is defense-in-depth.
-		if exitType == ExitCompleted && !pushFailed {
+		// If Dolt merge failed and we have an MR, the MR bead is stranded on
+		// the polecat's Dolt branch — preserve worktree for recovery (gt-cof).
+		if exitType == ExitCompleted && !pushFailed && !(mergeFailed && mrID != "") {
 			if err := selfNukePolecat(roleInfo, townRoot); err != nil {
 				// Non-fatal: Witness will clean up if we fail
 				style.PrintWarning("worktree nuke failed: %v (Witness will clean up)", err)

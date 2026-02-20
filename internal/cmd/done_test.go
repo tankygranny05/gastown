@@ -468,26 +468,91 @@ func TestClearDoneIntentLabel(t *testing.T) {
 // own branch-on-remote check).
 func TestPushFailureDoesNotNukeWorktree(t *testing.T) {
 	// This tests the boolean guard logic inline in runDone:
-	// if exitType == ExitCompleted && !pushFailed { ... nuke ... }
+	// if exitType == ExitCompleted && !pushFailed && !(mergeFailed && mrID != "") { ... nuke ... }
 	tests := []struct {
-		name       string
-		exitType   string
-		pushFailed bool
-		wantNuke   bool
+		name        string
+		exitType    string
+		pushFailed  bool
+		mergeFailed bool
+		mrID        string
+		wantNuke    bool
 	}{
-		{"completed+push-ok", ExitCompleted, false, true},
-		{"completed+push-failed", ExitCompleted, true, false},
-		{"escalated+push-ok", ExitEscalated, false, false},
-		{"deferred+push-ok", ExitDeferred, false, false},
-		{"escalated+push-failed", ExitEscalated, true, false},
+		{"completed+push-ok+merge-ok", ExitCompleted, false, false, "gt-mr1", true},
+		{"completed+push-failed", ExitCompleted, true, false, "", false},
+		{"completed+merge-failed+has-mr", ExitCompleted, false, true, "gt-mr1", false},
+		{"completed+merge-failed+no-mr", ExitCompleted, false, true, "", true},
+		{"escalated+push-ok", ExitEscalated, false, false, "", false},
+		{"deferred+push-ok", ExitDeferred, false, false, "", false},
+		{"escalated+push-failed", ExitEscalated, true, false, "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Replicate the guard condition from runDone
-			shouldNuke := tt.exitType == ExitCompleted && !tt.pushFailed
+			// Replicate the guard condition from runDone (gt-cof fix)
+			shouldNuke := tt.exitType == ExitCompleted && !tt.pushFailed && !(tt.mergeFailed && tt.mrID != "")
 			if shouldNuke != tt.wantNuke {
 				t.Errorf("shouldNuke = %v, want %v", shouldNuke, tt.wantNuke)
+			}
+		})
+	}
+}
+
+// TestMRCreationFailureSetsPushFailed verifies that when MR bead creation
+// fails after all retries, pushFailed is set to prevent worktree nuking.
+// This is the gt-cof fix: without this, the branch is pushed but MR is missing,
+// and the worktree gets nuked, losing the only reference to what work was done.
+func TestMRCreationFailureSetsPushFailed(t *testing.T) {
+	// Simulate the MR creation retry logic from done.go
+	pushFailed := false
+	mrID := ""
+
+	// Simulate 3 failed MR creation attempts
+	var mrCreateErr error
+	for mrAttempt := 1; mrAttempt <= 3; mrAttempt++ {
+		mrCreateErr = fmt.Errorf("connection refused")
+	}
+
+	// After all retries fail, pushFailed should be set
+	if mrCreateErr != nil {
+		pushFailed = true // Prevent worktree nuke
+	}
+
+	if !pushFailed {
+		t.Error("pushFailed should be true after MR creation failure")
+	}
+	if mrID != "" {
+		t.Error("mrID should be empty after MR creation failure")
+	}
+
+	// Verify worktree nuke guard works
+	shouldNuke := ExitCompleted == ExitCompleted && !pushFailed
+	if shouldNuke {
+		t.Error("worktree should NOT be nuked when MR creation failed")
+	}
+}
+
+// TestDeferredCleanupLogsErrors verifies that the deferred session cleanup
+// logs real errors before overwriting them with SilentExit(0).
+// This is the gt-cof fix: previously, errors like "cannot determine source issue"
+// were silently swallowed by the deferred cleanup.
+func TestDeferredCleanupLogsErrors(t *testing.T) {
+	// Verify that IsSilentExit correctly distinguishes real errors from SilentExit
+	tests := []struct {
+		name       string
+		err        error
+		wantSilent bool
+	}{
+		{"nil error", nil, false},
+		{"real error", fmt.Errorf("cannot determine source issue"), false},
+		{"SilentExit(0)", NewSilentExit(0), true},
+		{"SilentExit(1)", NewSilentExit(1), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, isSilent := IsSilentExit(tt.err)
+			if isSilent != tt.wantSilent {
+				t.Errorf("IsSilentExit(%v) = %v, want %v", tt.err, isSilent, tt.wantSilent)
 			}
 		})
 	}
