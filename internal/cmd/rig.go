@@ -849,6 +849,12 @@ func runRigRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving rigs config: %w", err)
 	}
 
+	// Remove rig from daemon.json patrol config (witness + refinery rigs arrays)
+	if err := config.RemoveRigFromDaemonPatrols(townRoot, name); err != nil {
+		// Non-fatal: daemon will stop spawning for this rig anyway since it's unregistered
+		fmt.Printf("  %s Could not update daemon.json patrols: %v\n", style.Warning.Render("!"), err)
+	}
+
 	// Remove route from routes.jsonl (issue #899)
 	if beadsPrefix != "" {
 		if err := beads.RemoveRoute(townRoot, beadsPrefix+"-"); err != nil {

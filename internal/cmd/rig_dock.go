@@ -9,12 +9,14 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
+	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/polecat"
 	"github.com/steveyegge/gastown/internal/refinery"
 	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/witness"
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // RigDockedLabel is the label set on rig identity beads when docked.
@@ -166,6 +168,15 @@ func runRigDock(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("setting docked label: %w", err)
 	}
 
+	// Remove rig from daemon.json patrol config so daemon stops spawning
+	// witness/refinery sessions for this rig on every heartbeat cycle.
+	townRoot, twErr := workspace.FindFromCwdOrError()
+	if twErr == nil {
+		if err := config.RemoveRigFromDaemonPatrols(townRoot, rigName); err != nil {
+			fmt.Printf("  %s Could not update daemon.json patrols: %v\n", style.Warning.Render("!"), err)
+		}
+	}
+
 	// Output
 	fmt.Printf("%s Rig %s docked (global)\n", style.Success.Render("✓"), rigName)
 	fmt.Printf("  Label added: %s\n", RigDockedLabel)
@@ -233,6 +244,15 @@ func runRigUndock(cmd *cobra.Command, args []string) error {
 		RemoveLabels: []string{RigDockedLabel},
 	}); err != nil {
 		return fmt.Errorf("removing docked label: %w", err)
+	}
+
+	// Re-add rig to daemon.json patrol config so daemon resumes spawning
+	// witness/refinery sessions for this rig.
+	townRoot, twErr := workspace.FindFromCwdOrError()
+	if twErr == nil {
+		if err := config.AddRigToDaemonPatrols(townRoot, rigName); err != nil {
+			fmt.Printf("  %s Could not update daemon.json patrols: %v\n", style.Warning.Render("!"), err)
+		}
 	}
 
 	fmt.Printf("%s Rig %s undocked\n", style.Success.Render("✓"), rigName)
