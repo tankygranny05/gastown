@@ -63,6 +63,9 @@ const (
 	TypeEscalationClosed = "escalation_closed"
 	TypePatrolComplete   = "patrol_complete"
 
+	// Done failure events (emitted by gt done)
+	TypeDoneMRFailed = "done_mr_failed" // MR bead creation failed during gt done (gt-t79)
+
 	// Merge queue events (emitted by refinery)
 	TypeMergeStarted = "merge_started"
 	TypeMerged       = "merged"
@@ -311,6 +314,16 @@ func MassDeathPayload(count int, window string, sessions []string, possibleCause
 		p["possible_cause"] = possibleCause
 	}
 	return p
+}
+
+// DoneMRFailedPayload creates a payload for done_mr_failed events (gt-t79).
+// Emitted when MR bead creation fails during gt done with status=COMPLETED.
+func DoneMRFailedPayload(issueID, branch, reason string) map[string]interface{} {
+	return map[string]interface{}{
+		"issue":  issueID,
+		"branch": branch,
+		"reason": reason,
+	}
 }
 
 // SessionPayload creates a payload for session start/end events.
