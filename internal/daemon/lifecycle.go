@@ -415,9 +415,28 @@ func (d *Daemon) getWorkDir(config *beads.RoleConfig, parsed *ParsedIdentity) st
 	case "deacon":
 		return d.config.TownRoot
 	case "witness":
+		// Match witness.Manager.witnessDir() resolution order:
+		// 1. witness/rig/ (preferred - has its own worktree)
+		// 2. witness/ (fallback)
+		// 3. rig root (last resort)
+		witnessRigDir := filepath.Join(d.config.TownRoot, parsed.RigName, "witness", "rig")
+		if _, err := os.Stat(witnessRigDir); err == nil {
+			return witnessRigDir
+		}
+		witnessDir := filepath.Join(d.config.TownRoot, parsed.RigName, "witness")
+		if _, err := os.Stat(witnessDir); err == nil {
+			return witnessDir
+		}
 		return filepath.Join(d.config.TownRoot, parsed.RigName)
 	case "refinery":
-		return filepath.Join(d.config.TownRoot, parsed.RigName, "refinery", "rig")
+		// Match refinery.Manager.Start() resolution order:
+		// 1. refinery/rig/ (preferred - refinery's own worktree)
+		// 2. mayor/rig/ (legacy architecture fallback)
+		refineryRigDir := filepath.Join(d.config.TownRoot, parsed.RigName, "refinery", "rig")
+		if _, err := os.Stat(refineryRigDir); err == nil {
+			return refineryRigDir
+		}
+		return filepath.Join(d.config.TownRoot, parsed.RigName, "mayor", "rig")
 	case "crew":
 		return filepath.Join(d.config.TownRoot, parsed.RigName, "crew", parsed.AgentName)
 	case "polecat":
